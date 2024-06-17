@@ -20,6 +20,7 @@ using RegionIndex    = unsigned int;
 using Time           = double;
 using Endpoint       = unsigned int;
 using ClockValuation = Time;
+using ClockConstraintIndex = unsigned int;
 
 /// A clock of a plant.
 class Clock

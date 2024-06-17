@@ -138,6 +138,85 @@ operator==(const ATARegionState<LocationT> &s1, const ATARegionState<LocationT> 
 	return !(s1 < s2) && !(s2 < s1);
 }
 
+/** @brief The zone state of a plant state.
+ *
+ * A PlantZoneState is a tuple (location, clock_name, set of clock constraints) */
+template <typename LocationT>
+struct PlantZoneState
+{
+	/** The location of the plant zone state */
+	LocationT location;
+	/** The clock name of this zone state */
+	std::string clock;
+	/** The clock constraint index of the zone in this state */
+	std::set<ClockConstraintIndex> constraints;
+};
+
+/** Compare two plant zone states.
+ * @param s1 The first state
+ * @param s2 The second state
+ * @return true if s1 is lexicographically smaller than s2
+ */
+template <typename LocationT>
+bool
+operator<(const PlantZoneState<LocationT> &s1, const PlantZoneState<LocationT> &s2)
+{
+	return std::tie(s1.location, s1.clock, s1.constraints)
+	       < std::tie(s2.location, s2.clock, s2.constraints);
+}
+
+/** Check two plant zone states for equality.
+ * Two plant zone states are considered equal if they have the same location, clock name, and
+ * clock constraint index.
+ * @param s1 The first state
+ * @param s2 The second state
+ * @return true if s1 is equal to s2
+ */
+template <typename LocationT>
+bool
+operator==(const PlantZoneState<LocationT> &s1, const PlantZoneState<LocationT> &s2)
+{
+	return !(s1 < s2) && !(s2 < s1);
+}
+
+/** @brief The zone state of an ATA state
+ * 
+ * An ATAZoneState is a pair (location, set of clock constraints) */
+template <typename ConstraintSymbolType>
+struct ATAZoneState
+{
+	/** The ATA formula in the zone ATA state */
+	logic::MTLFormula<ConstraintSymbolType> formula;
+	/** The index of the clock constraint of the zone */
+	std::set<ClockConstraintIndex> constraints;
+};
+
+/** Compare two ATA zone states.
+ * @param s1 The first state
+ * @param s2 The second state
+ * @return true if s1 is lexicographically smaller than s2
+ */
+template <typename ConstraintSymbolType>
+bool
+operator<(const ATAZoneState<ConstraintSymbolType> &s1, const ATAZoneState<ConstraintSymbolType> &s2)
+{
+	return std::tie(s1.formula, s1.constraints) < std::tie(s2.formula, s2.constraints);
+}
+
+/** Check two ATA zone states for equality.
+ * Two ATA zone states are considered equal if they have the same location and clock constraint
+ * index.
+ * @param s1 The first state
+ * @param s2 The second state
+ * @return true if s1 is equal to s2
+ */
+template <typename ConstraintSymbolType>
+bool
+operator==(const ATAZoneState<ConstraintSymbolType> &s1, const ATAZoneState<ConstraintSymbolType> &s2)
+{
+	return !(s1 < s2) && !(s2 < s1);
+}
+
 /** An ABRegionSymbol is either a TARegionState or an ATARegionState */
 template <typename LocationT, typename ConstraintSymbolType>
 using ABRegionSymbol =
@@ -162,7 +241,7 @@ get_time(const ABSymbol<Location, ConstraintSymbolType> &w)
 	}
 }
 
-/** Get the clock valuation for an ABRegionSymbol, which is either a
+/** Get the clock valuation for a regionalized ABRegionSymbol, which is either a
  * TARegionState or an ATARegionState.
  * @param w The symbol to read the time from
  * @return The region index in the given state
@@ -175,6 +254,31 @@ get_region_index(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
 		return std::get<PlantRegionState<Location>>(w).region_index;
 	} else {
 		return std::get<ATARegionState<ConstraintSymbolType>>(w).region_index;
+	}
+}
+
+/** An ABZoneSymbol is either a TAZoneState or an ATAZoneState */
+template <typename LocationT, typename ConstraintSymbolType>
+using ABZoneSymbol =
+  std::variant<PlantZoneState<LocationT>, ATAZoneState<ConstraintSymbolType>>;
+
+/** A canonical word H(s) for a zone A/B configuration */
+template <typename LocationT, typename ConstraintSymbolT>
+using ZoneCanonicalABWord = std::vector<std::set<ABZoneSymbol<LocationT, ConstraintSymbolT>>>;
+
+/** Get the clock constraints for a zone ABZoneSymbol, which is either a
+ * PlantZoneState or an ATAZoneState.
+ * @param w The symbol to read the time from
+ * @return The set of clock constraints for the zone in the given state, returned as indices
+ */
+template <typename Location, typename ConstraintSymbolType>
+std::set<ClockConstraintIndex>
+get_constraints(const ABZoneSymbol<Location, ConstraintSymbolType> &w)
+{
+	if (std::holds_alternative<PlantZoneState<Location>>(w)) {
+		return std::get<PlantZoneState<Location>>(w).constraints;
+	} else {
+		return std::get<ATAZoneState<ConstraintSymbolType>>(w).constraints;
 	}
 }
 
@@ -348,6 +452,42 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 	}
 	assert(is_valid_canonical_word(abs, 2 * K + 1));
 	return abs;
+}
+
+//TODO:
+//Also add is_valid_canonical_word and get_canonical_word for zones or figure out way to adapt get_canonical_words
+
+/** Validate a canonical word for zones.
+ * Check a word created using zone consruction on whether it is a valid canonical word. Throws an exception if this is not the case.
+ * @param word The word to check
+ * @param max_constant The maximal constant that may occur in clock constraints of the canonical word
+ * @return true if the word is a valid canonical word
+ */
+template <typename Location, typename ConstraintSymbolType>
+bool
+is_valid_zone_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &word,
+                        Time                                            max_constant = 0)
+{
+
+}
+
+
+/** Get the canonical word H(s) for the given A/B configuration s, where A and B are
+ * zone constructions.
+ * @param plant_configuration The configuration of the plant A (e.g., a TA
+ * configuration)
+ * @param ata_configuration The configuration of the alternating timed automaton B
+ * @param K The value of the largest constant any clock may be compared to
+ * @return The canonical word representing the state s, as a sorted vector of
+ * sets of tuples (triples from A and pairs from B).
+ */
+template <typename Location, typename ConstraintSymbolType>
+ZoneCanonicalABWord<Location, ConstraintSymbolType>
+get_zone_canonical_word(const PlantConfiguration<Location>           &plant_configuration,
+                   const ATAConfiguration<ConstraintSymbolType> &ata_configuration,
+                   const unsigned int                            K)
+{
+	
 }
 
 /** Print a PlantRegionState. */
