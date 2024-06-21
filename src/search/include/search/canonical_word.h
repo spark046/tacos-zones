@@ -148,8 +148,8 @@ struct PlantZoneState
 	LocationT location;
 	/** The clock name of this zone state */
 	std::string clock;
-	/** The clock constraint index of the zone in this state */
-	std::set<ClockConstraintIndex> constraints;
+	/** The index for the set of clock constraints */
+	RegionIndex constraints;
 };
 
 /** Compare two plant zone states.
@@ -187,8 +187,8 @@ struct ATAZoneState
 {
 	/** The ATA formula in the zone ATA state */
 	logic::MTLFormula<ConstraintSymbolType> formula;
-	/** The index of the clock constraint of the zone */
-	std::set<ClockConstraintIndex> constraints;
+	/** The index of the set of clock constraints */
+	RegionIndex constraints;
 };
 
 /** Compare two ATA zone states.
@@ -217,10 +217,11 @@ operator==(const ATAZoneState<ConstraintSymbolType> &s1, const ATAZoneState<Cons
 	return !(s1 < s2) && !(s2 < s1);
 }
 
-/** An ABRegionSymbol is either a TARegionState or an ATARegionState */
+/** An ABRegionSymbol is either a TARegionState or an ATARegionState, or the zone variants */
 template <typename LocationT, typename ConstraintSymbolType>
 using ABRegionSymbol =
-  std::variant<PlantRegionState<LocationT>, ATARegionState<ConstraintSymbolType>>;
+  std::variant<PlantRegionState<LocationT>, ATARegionState<ConstraintSymbolType>,
+			   PlantZoneState<LocationT>, ATAZoneState<ConstraintSymbolType>>;
 
 /** A canonical word H(s) for a regionalized A/B configuration */
 template <typename LocationT, typename ConstraintSymbolT>
@@ -242,9 +243,9 @@ get_time(const ABSymbol<Location, ConstraintSymbolType> &w)
 }
 
 /** Get the clock valuation for a regionalized ABRegionSymbol, which is either a
- * TARegionState or an ATARegionState.
+ * TARegionState or an ATARegionState, or the zone versions.
  * @param w The symbol to read the time from
- * @return The region index in the given state
+ * @return The region index in the given state. If the state was a zone state, then the region index is an index pointing to a set of clock constraints
  */
 template <typename Location, typename ConstraintSymbolType>
 RegionIndex
@@ -252,30 +253,9 @@ get_region_index(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
 {
 	if (std::holds_alternative<PlantRegionState<Location>>(w)) {
 		return std::get<PlantRegionState<Location>>(w).region_index;
-	} else {
+	} else if (std::holds_alternative<ATARegionState<ConstraintSymbolType>>(w)) {
 		return std::get<ATARegionState<ConstraintSymbolType>>(w).region_index;
-	}
-}
-
-/** An ABZoneSymbol is either a TAZoneState or an ATAZoneState */
-template <typename LocationT, typename ConstraintSymbolType>
-using ABZoneSymbol =
-  std::variant<PlantZoneState<LocationT>, ATAZoneState<ConstraintSymbolType>>;
-
-/** A canonical word H(s) for a zone A/B configuration */
-template <typename LocationT, typename ConstraintSymbolT>
-using ZoneCanonicalABWord = std::vector<std::set<ABZoneSymbol<LocationT, ConstraintSymbolT>>>;
-
-/** Get the clock constraints for a zone ABZoneSymbol, which is either a
- * PlantZoneState or an ATAZoneState.
- * @param w The symbol to read the time from
- * @return The set of clock constraints for the zone in the given state, returned as indices
- */
-template <typename Location, typename ConstraintSymbolType>
-std::set<ClockConstraintIndex>
-get_constraints(const ABZoneSymbol<Location, ConstraintSymbolType> &w)
-{
-	if (std::holds_alternative<PlantZoneState<Location>>(w)) {
+	} else if(std::holds_alternative<PlantZoneState<Location>>(w)) {
 		return std::get<PlantZoneState<Location>>(w).constraints;
 	} else {
 		return std::get<ATAZoneState<ConstraintSymbolType>>(w).constraints;
@@ -398,6 +378,7 @@ is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &w
  * configuration)
  * @param ata_configuration The configuration of the alternating timed automaton B
  * @param K The value of the largest constant any clock may be compared to
+ * @param zones Whether the canonical word is for a zone construction
  * @return The canonical word representing the state s, as a sorted vector of
  * sets of tuples (triples from A and pairs from B).
  */
@@ -405,7 +386,8 @@ template <typename Location, typename ConstraintSymbolType>
 CanonicalABWord<Location, ConstraintSymbolType>
 get_canonical_word(const PlantConfiguration<Location>           &plant_configuration,
                    const ATAConfiguration<ConstraintSymbolType> &ata_configuration,
-                   const unsigned int                            K)
+                   const unsigned int                            K,
+				   const boolean zones = false)
 {
 	using ABSymbol       = ABSymbol<Location, ConstraintSymbolType>;
 	using ABRegionSymbol = ABRegionSymbol<Location, ConstraintSymbolType>;
@@ -427,68 +409,40 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 		partitioned_g[utilities::getFractionalPart<int, ClockValuation>(get_time(symbol))].insert(
 		  symbol);
 	}
-	// Replace exact clock values by region indices.
-	automata::ta::TimedAutomatonRegions             regionSet{K};
-	CanonicalABWord<Location, ConstraintSymbolType> abs;
-	for (const auto &[fractional_part, g_i] : partitioned_g) {
-		std::set<ABRegionSymbol> abs_i;
-		std::transform(
-		  g_i.begin(),
-		  g_i.end(),
-		  std::inserter(abs_i, abs_i.end()),
-		  [&](const ABSymbol &w) -> ABRegionSymbol {
-			  if (std::holds_alternative<PlantState<Location>>(w)) {
-				  const PlantState<Location> &s = std::get<PlantState<Location>>(w);
-				  return PlantRegionState<Location>{s.location,
-				                                    s.clock,
-				                                    regionSet.getRegionIndex(s.clock_valuation)};
-			  } else {
-				  const ATAState<ConstraintSymbolType> &s = std::get<ATAState<ConstraintSymbolType>>(w);
-				  return ATARegionState<ConstraintSymbolType>{s.location,
-				                                              regionSet.getRegionIndex(s.clock_valuation)};
-			  }
-		  });
-		abs.push_back(abs_i);
+
+	if(!zones) {
+		// Replace exact clock values by region indices.
+		automata::ta::TimedAutomatonRegions             regionSet{K};
+		CanonicalABWord<Location, ConstraintSymbolType> abs;
+		for (const auto &[fractional_part, g_i] : partitioned_g) {
+			std::set<ABRegionSymbol> abs_i;
+			std::transform(
+			  g_i.begin(),
+			  g_i.end(),
+			  std::inserter(abs_i, abs_i.end()),
+			  [&](const ABSymbol &w) -> ABRegionSymbol {
+				  if (std::holds_alternative<PlantState<Location>>(w)) {
+					  const PlantState<Location> &s = std::get<PlantState<Location>>(w);
+					  return PlantRegionState<Location>{s.location,
+					                                    s.clock,
+					                                    regionSet.getRegionIndex(s.clock_valuation)};
+				  } else {
+					  const ATAState<ConstraintSymbolType> &s = std::get<ATAState<ConstraintSymbolType>>(w);
+					  return ATARegionState<ConstraintSymbolType>{s.location,
+					                                              regionSet.getRegionIndex(s.clock_valuation)};
+				  }
+			  });
+			abs.push_back(abs_i);
+		}
+		assert(is_valid_canonical_word(abs, 2 * K + 1));
+		return abs;
+	} else {
+		//TODO: For each clock valuation v, zones(v) is the set of all clock constraints that are fulfilled by v
 	}
-	assert(is_valid_canonical_word(abs, 2 * K + 1));
-	return abs;
-}
-
-//TODO:
-//Also add is_valid_canonical_word and get_canonical_word for zones or figure out way to adapt get_canonical_words
-
-/** Validate a canonical word for zones.
- * Check a word created using zone consruction on whether it is a valid canonical word. Throws an exception if this is not the case.
- * @param word The word to check
- * @param max_constant The maximal constant that may occur in clock constraints of the canonical word
- * @return true if the word is a valid canonical word
- */
-template <typename Location, typename ConstraintSymbolType>
-bool
-is_valid_zone_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &word,
-                        Time                                            max_constant = 0)
-{
-
-}
-
-
-/** Get the canonical word H(s) for the given A/B configuration s, where A and B are
- * zone constructions.
- * @param plant_configuration The configuration of the plant A (e.g., a TA
- * configuration)
- * @param ata_configuration The configuration of the alternating timed automaton B
- * @param K The value of the largest constant any clock may be compared to
- * @return The canonical word representing the state s, as a sorted vector of
- * sets of tuples (triples from A and pairs from B).
- */
-template <typename Location, typename ConstraintSymbolType>
-ZoneCanonicalABWord<Location, ConstraintSymbolType>
-get_zone_canonical_word(const PlantConfiguration<Location>           &plant_configuration,
-                   const ATAConfiguration<ConstraintSymbolType> &ata_configuration,
-                   const unsigned int                            K)
-{
 	
 }
+
+//TODO Make some output functions for ostream etc.
 
 /** Print a PlantRegionState. */
 template <typename LocationT>
