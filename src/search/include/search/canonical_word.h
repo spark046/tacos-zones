@@ -387,7 +387,7 @@ CanonicalABWord<Location, ConstraintSymbolType>
 get_canonical_word(const PlantConfiguration<Location>           &plant_configuration,
                    const ATAConfiguration<ConstraintSymbolType> &ata_configuration,
                    const unsigned int                            K,
-				   const boolean zones = false)
+				   const bool zones = false)
 {
 	using ABSymbol       = ABSymbol<Location, ConstraintSymbolType>;
 	using ABRegionSymbol = ABRegionSymbol<Location, ConstraintSymbolType>;

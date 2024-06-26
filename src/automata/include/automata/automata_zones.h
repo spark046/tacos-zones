@@ -1,11 +1,10 @@
 
 #include "utilities/types.h"
 
-#include "automata/automata.h"
+#include "automata.h"
+#include "automata/ta.h"
 
-#include <set>
-
-namespace tacos::automata {
+namespace tacos::automata::zones {
 	struct AutomatonZones
 	{
 		/* Maximum constant which can appear in the clock constraints of the zone */
@@ -30,8 +29,28 @@ namespace tacos::automata {
 	 * the given region
 	 */
 	std::set<ClockConstraint>
-	get_clock_constraints_from_region_index(RegionIndex         region_index,
-	                                        RegionIndex         max_region_index,
-	                                        ConstraintBoundType bound_type = ConstraintBoundType::BOTH);
+	get_clock_constraints_from_region_index();
+
+	/**
+	 * @brief Returns a set of all clock constraints of a particular timed automaton
+	 * This is done by iterating over all constraints.
+	 * 
+	 * @param timePoint The valuation that is supposed to be checked by the constraints.
+	 * @return A multimap of Clock Constraints, where the key corresponds to the clock for whicht the constraint is for std::set<ClockConstraint> 
+	 */
+	template <typename LocationT, typename AP>
+	std::multimap<std::string, ClockConstraint>
+	get_clock_constraints_of_ta(const ta::TimedAutomaton<LocationT, AP> &ta);
+
+	/**
+	 * @brief Get a multimap of all fulfilled clock constraints by some specific valuation
+	 * 
+	 * @param allConstraints Multimap containing all clock constraints that should be checked with the valuation. The key is the clock and the value is a clock constraint.	
+	 * @param clock Name of the relevant clock
+	 * @param val Valuation of the clock
+	 * @return Multimap that only consists of all fulfilled constraints
+	 */
+	std::multimap<std::string, ClockConstraint>
+	get_fulfilled_clock_constraints(const std::multimap<std::string, ClockConstraint> allConstraints, std::string clock, ClockValuation val);
 
 }
