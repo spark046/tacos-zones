@@ -1,18 +1,21 @@
+#ifndef SRC_AUTOMATA_INCLUDE_AUTOMATA_AUTOMATA_ZONES_H
+#define SRC_AUTOMATA_INCLUDE_AUTOMATA_AUTOMATA_ZONES_H
 
 #include "utilities/types.h"
 
 #include "automata.h"
-#include "automata/ta.h"
+#include "ta.h"
 
-namespace tacos::automata::zones {
-	struct AutomatonZones
-	{
-		/* Maximum constant which can appear in the clock constraints of the zone */
-		unsigned int maximum_constant;
-
-		/* Set of clock constraints, which constitute the zone. I.e. the zone is the set of valuations that satisfy all clock constraints in this set */
-		RegionIndex get_clock_constraints(ClockValuation timePoint);
-	};
+namespace tacos::zones {
+	
+	//struct AutomatonZones
+	//{
+	//	/* Maximum constant which can appear in the clock constraints of the zone */
+	//	unsigned int maximum_constant;
+	//
+	//	/* Set of clock constraints, which constitute the zone. I.e. the zone is the set of valuations that satisfy all clock constraints in this set */
+	//	RegionIndex get_clock_constraints(ClockValuation timePoint);
+	//};
 
 	/** @brief Given a RegionIndex, compute the set of clock constraints that belong to this index.
 	 * This index fulfills the following properties:
@@ -28,7 +31,7 @@ namespace tacos::automata::zones {
 	 * @return A set (with either one or two elements) of clock constraints that restrict some clock to
 	 * the given region
 	 */
-	std::set<ClockConstraint>
+	std::set<automata::ClockConstraint>
 	get_clock_constraints_from_region_index();
 
 	/**
@@ -36,11 +39,11 @@ namespace tacos::automata::zones {
 	 * This is done by iterating over all constraints.
 	 * 
 	 * @param timePoint The valuation that is supposed to be checked by the constraints.
-	 * @return A multimap of Clock Constraints, where the key corresponds to the clock for whicht the constraint is for std::set<ClockConstraint> 
+	 * @return A multimap of Clock Constraints, where the key is a string corresponding to the clock for which the constraint is for, and the values are clock constraints.
 	 */
 	template <typename LocationT, typename AP>
-	std::multimap<std::string, ClockConstraint>
-	get_clock_constraints_of_ta(const ta::TimedAutomaton<LocationT, AP> &ta);
+	std::multimap<std::string, automata::ClockConstraint>
+	get_clock_constraints_of_ta(const automata::ta::TimedAutomaton<LocationT, AP> &ta);
 
 	/**
 	 * @brief Get a multimap of all fulfilled clock constraints by some specific valuation
@@ -50,7 +53,18 @@ namespace tacos::automata::zones {
 	 * @param val Valuation of the clock
 	 * @return Multimap that only consists of all fulfilled constraints
 	 */
-	std::multimap<std::string, ClockConstraint>
-	get_fulfilled_clock_constraints(const std::multimap<std::string, ClockConstraint> allConstraints, std::string clock, ClockValuation val);
+	std::multimap<std::string, automata::ClockConstraint>
+	get_fulfilled_clock_constraints(const std::multimap<std::string, automata::ClockConstraint> allConstraints, std::string clock, ClockValuation val);
 
-}
+	template<typename ThisIsString>
+	std::string
+	test() {
+		ThisIsString s = "Test";
+
+		return s;
+	}
+} //namespace tacos::zones
+
+#include "automata_zones.hpp"
+
+#endif

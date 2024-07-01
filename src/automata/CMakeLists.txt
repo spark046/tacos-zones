@@ -1,4 +1,4 @@
-add_library(automata SHARED ta.cpp automata.cpp ata.cpp ta_regions.cpp)
+add_library(automata SHARED ta.cpp automata.cpp ata.cpp ta_regions.cpp automata_zones.cpp)
 target_link_libraries(automata PUBLIC range-v3::range-v3 utilities fmt::fmt NamedType)
 target_include_directories(
   automata

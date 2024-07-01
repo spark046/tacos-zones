@@ -233,7 +233,7 @@ using CanonicalABWord = std::vector<std::set<ABRegionSymbol<LocationT, Constrain
  */
 template <typename Location, typename ConstraintSymbolType>
 ClockValuation
-get_time(const ABSymbol<Location, ConstraintSymbolType> &w)
+get_time(const ABSymbol<Location,#include "automata_zones.hpp" ConstraintSymbolType> &w)
 {
 	if (std::holds_alternative<PlantState<Location>>(w)) {
 		return std::get<PlantState<Location>>(w).clock_valuation;
@@ -438,6 +438,8 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 		return abs;
 	} else {
 		//TODO: For each clock valuation v, zones(v) is the set of all clock constraints that are fulfilled by v
+		CanonicalABWord<Location, ConstraintSymbolType> abs;
+		return abs;
 	}
 	
 }
@@ -459,6 +461,24 @@ std::ostream &
 operator<<(std::ostream &os, const search::ATARegionState<ConstraintSymbolType> &state)
 {
 	os << "(" << state.formula << ", " << state.region_index << ")";
+	return os;
+}
+
+/** Print a PlantZoneState. */
+template <typename LocationT>
+std::ostream &
+operator<<(std::ostream &os, const search::PlantZoneState<LocationT> &state)
+{
+	os << "(" << state.location << ", " << state.clock << ", " << state.constraints << ")";
+	return os;
+}
+
+/** Print an ATAZoneState. */
+template <typename ConstraintSymbolType>
+std::ostream &
+operator<<(std::ostream &os, const search::ATAZoneState<ConstraintSymbolType> &state)
+{
+	os << "(" << state.formula << ", " << state.constraints << ")";
 	return os;
 }
 
@@ -644,6 +664,16 @@ struct formatter<tacos::search::PlantRegionState<LocationT>> : ostream_formatter
 
 template <typename ConstraintSymbolType>
 struct formatter<tacos::search::ATARegionState<ConstraintSymbolType>> : ostream_formatter
+{
+};
+
+template <typename LocationT>
+struct formatter<tacos::search::PlantZoneState<LocationT>> : ostream_formatter
+{
+};
+
+template <typename ConstraintSymbolType>
+struct formatter<tacos::search::ATAZoneState<ConstraintSymbolType>> : ostream_formatter
 {
 };
 
