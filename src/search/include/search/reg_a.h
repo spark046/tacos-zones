@@ -31,8 +31,6 @@ reg_a(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 		for (const auto &ab_symbol : partition) {
 			if (std::holds_alternative<PlantRegionState<Location>>(ab_symbol)) {
 				res_i.insert(ab_symbol);
-			} else if(std::holds_alternative<PlantZoneState<Location>>(ab_symbol)) {
-				res_i.insert(ab_symbol);
 			}
 		}
 		// TODO check if we can just skip the whole partition

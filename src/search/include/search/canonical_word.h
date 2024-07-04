@@ -25,11 +25,10 @@ namespace tacos::search {
 template <typename LocationT, typename ConstraintSymbolType>
 using ABSymbol = std::variant<PlantState<LocationT>, ATAState<ConstraintSymbolType>>;
 
-/** An ABRegionSymbol is either a TARegionState or an ATARegionState, or the zone variants */
+/** An ABRegionSymbol is either a TARegionState or an ATARegionState */
 template <typename LocationT, typename ConstraintSymbolType>
 using ABRegionSymbol =
-  std::variant<PlantRegionState<LocationT>, ATARegionState<ConstraintSymbolType>,
-			   PlantZoneState<LocationT>, ATAZoneState<ConstraintSymbolType>>;
+  std::variant<PlantRegionState<LocationT>, ATARegionState<ConstraintSymbolType>>;
 
 /** A canonical word H(s) for a regionalized A/B configuration */
 template <typename LocationT, typename ConstraintSymbolT>
@@ -50,10 +49,10 @@ get_time(const ABSymbol<Location, ConstraintSymbolType> &w)
 	}
 }
 
-/** Get the clock valuation for a regionalized ABRegionSymbol, which is either a
- * TARegionState or an ATARegionState, or the zone versions.
+/** Get the region index for a regionalized ABRegionSymbol, which is either a
+ * TARegionState or an ATARegionState.
  * @param w The symbol to read the time from
- * @return The region index in the given state. If the state was a zone state, then the region index is an index pointing to a set of clock constraints
+ * @return The region index in the given state.
  */
 template <typename Location, typename ConstraintSymbolType>
 RegionIndex
@@ -61,12 +60,8 @@ get_region_index(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
 {
 	if (std::holds_alternative<PlantRegionState<Location>>(w)) {
 		return std::get<PlantRegionState<Location>>(w).symbolic_valuation;
-	} else if (std::holds_alternative<ATARegionState<ConstraintSymbolType>>(w)) {
-		return std::get<ATARegionState<ConstraintSymbolType>>(w).symbolic_valuation;
-	} else if(std::holds_alternative<PlantZoneState<Location>>(w)) {
-		return std::get<PlantZoneState<Location>>(w).constraints;
 	} else {
-		return std::get<ATAZoneState<ConstraintSymbolType>>(w).constraints;
+		return std::get<ATARegionState<ConstraintSymbolType>>(w).symbolic_valuation;
 	}
 }
 

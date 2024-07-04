@@ -4,6 +4,8 @@
 #include "utilities/types.h"
 #include "automata/ta_regions.h"
 
+#include "search/search.h"
+
 #include <catch2/catch_test_macros.hpp>
 #include <map>
 #include <string>
@@ -34,6 +36,28 @@ TEST_CASE("Getting fulfilled Clock Constraints", "[zones]")
 	CHECK(zones::get_clock_constraints_of_ta<std::string, std::string>(ta) == set1);
 
 	CHECK(zones::get_fulfilled_clock_constraints(zones::get_clock_constraints_of_ta<std::string, std::string>(ta), "x", 0) == set2);
+}
+
+TEST_CASE("Delaying zones of zone states", "[zones]")
+{
+	std::multimap<std::string, automata::ClockConstraint> zone1 = {{"x", automata::AtomicClockConstraintT<std::greater<Time>>(1)}};
+
+	std::multimap<std::string, automata::ClockConstraint> zone2 = { {"x", automata::AtomicClockConstraintT<std::greater<Time>>(1)},
+																	{"x", automata::AtomicClockConstraintT<std::less<Time>>(2)}};
+
+	std::multimap<std::string, automata::ClockConstraint> zone3 = { {"x", automata::AtomicClockConstraintT<std::equal_to<Time>>(1)},
+																	{"x", automata::AtomicClockConstraintT<std::not_equal_to<Time>>(2)}};
+
+	std::multimap<std::string, automata::ClockConstraint> zone4 = { {"x", automata::AtomicClockConstraintT<std::greater_equal<Time>>(1)}};
+
+	search::PlantZoneState<std::string> ta_state1 = {"l0", "x", zone1};
+	CHECK(ta_state1.get_increment_valuation() == zone1);
+
+	search::PlantZoneState<std::string> ta_state2 = {"l0", "x", zone2};
+	CHECK(ta_state2.get_increment_valuation() == zone1);
+
+	search::PlantZoneState<std::string> ta_state3 = {"l0", "x", zone3};
+	CHECK(ta_state3.get_increment_valuation() == zone4);
 }
 
 } // namespace
