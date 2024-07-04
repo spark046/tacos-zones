@@ -57,7 +57,7 @@ increment_region_indexes(
 	               [max_region_index](auto configuration) {
 		               if (std::holds_alternative<PlantRegionState<Location>>(configuration)) {
 			               auto &ta_configuration = std::get<PlantRegionState<Location>>(configuration);
-			               RegionIndex &region_index = ta_configuration.region_index;
+			               RegionIndex &region_index = ta_configuration.symbolic_valuation;
 			               // Increment if the region index is less than the max_region_index and if the
 			               // region index is even or if we increment all region indexes.
 			               if (region_index < max_region_index) {
@@ -66,7 +66,7 @@ increment_region_indexes(
 		               } else {
 			               auto &ata_configuration =
 			                 std::get<ATARegionState<ConstraintSymbolType>>(configuration);
-			               RegionIndex &region_index = ata_configuration.region_index;
+			               RegionIndex &region_index = ata_configuration.symbolic_valuation;
 			               // Increment if the region index is less than the max_region_index and if the
 			               // region index is even or if we increment all region indexes.
 			               if (region_index < max_region_index) {
@@ -183,7 +183,7 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 			// TODO Refactor, fractional/integral outside of if
 			if (std::holds_alternative<PlantRegionState<Location>>(symbol)) {
 				const auto       &ta_region_state = std::get<PlantRegionState<Location>>(symbol);
-				const RegionIndex region_index    = ta_region_state.region_index;
+				const RegionIndex region_index    = ta_region_state.symbolic_valuation;
 				const Time        fractional_part =
           region_index % 2 == 0 ? 0 : time_delta * static_cast<Time>((i + 1));
 				const Time  integral_part = static_cast<RegionIndex>(region_index / 2);
@@ -193,7 +193,7 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 				plant_configuration.clock_valuations[clock_name] = integral_part + fractional_part;
 			} else { // ATARegionState<ConstraintSymbolType>
 				const auto       &ata_region_state = std::get<ATARegionState<ConstraintSymbolType>>(symbol);
-				const RegionIndex region_index     = ata_region_state.region_index;
+				const RegionIndex region_index     = ata_region_state.symbolic_valuation;
 				const Time        fractional_part =
           region_index % 2 == 0 ? 0 : time_delta * static_cast<Time>((i + 1));
 				const Time integral_part = static_cast<RegionIndex>(region_index / 2);
@@ -201,7 +201,7 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 				// TODO check: the formula (aka ConstraintSymbolType) encodes the location, the clock
 				// valuation is separate and a configuration is a set of such pairs. Is this already
 				// sufficient?
-				ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_region_state.formula,
+				ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_region_state.location,
 				                                                        fractional_part + integral_part});
 			}
 		}

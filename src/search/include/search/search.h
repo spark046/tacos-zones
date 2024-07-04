@@ -57,7 +57,7 @@ has_satisfiable_ata_configuration(
 			         std::end(component),
 			         [](const auto &region_symbol) {
 				         return std::holds_alternative<ATARegionState<ConstraintSymbolType>>(region_symbol)
-				                && std::get<ATARegionState<ConstraintSymbolType>>(region_symbol).formula
+				                && std::get<ATARegionState<ConstraintSymbolType>>(region_symbol).location
 				                     == logic::MTLFormula<ConstraintSymbolType>{
 				                       mtl_ata_translation::get_sink<ConstraintSymbolType>()};
 			         })

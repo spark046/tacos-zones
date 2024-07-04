@@ -11,6 +11,7 @@
 #include "automata/ata.h"
 
 #include <fmt/ostream.h>
+#include "symbolic_state.h"
 // TODO Regions should not be TA-specific
 #include "automata/ta_regions.h"
 #include "mtl/MTLFormula.h"
@@ -20,202 +21,9 @@
 /** Get the regionalized synchronous product of a TA and an ATA. */
 namespace tacos::search {
 
-/** Always use ATA configurations over MTLFormulas */
-template <typename ConstraintSymbolType>
-using ATAConfiguration = automata::ata::Configuration<logic::MTLFormula<ConstraintSymbolType>>;
-
-/** @brief The state of a plant
- *
- * An expanded state (location, clock_name, clock_valuation) of a plant.
- * A plant may be a TA or a Golog Program, depending on the template argument. */
-template <typename LocationT>
-struct PlantState
-{
-	/** The location part of this state */
-	LocationT location;
-	/** The clock name of this state */
-	std::string clock;
-	/** The clock valuation of the clock in this state */
-	ClockValuation clock_valuation;
-};
-
-/** Compare two PlantStates
- * @param s1 The first state
- * @param s2 The second state
- * @return true if s1 is lexicographically smaller than s2
- */
-template <typename LocationT>
-bool
-operator<(const PlantState<LocationT> &s1, const PlantState<LocationT> &s2)
-{
-	return std::tie(s1.location, s1.clock, s1.clock_valuation)
-	       < std::tie(s2.location, s2.clock, s2.clock_valuation);
-}
-
-/** Always use ATA states over MTLFormulas */
-template <typename ConstraintSymbolType>
-using ATAState = automata::ata::State<logic::MTLFormula<ConstraintSymbolType>>;
 /** An ABSymbol is either a PlantState or an ATAState */
 template <typename LocationT, typename ConstraintSymbolType>
 using ABSymbol = std::variant<PlantState<LocationT>, ATAState<ConstraintSymbolType>>;
-
-/** @brief A regionalized plant state.
- *
- * A PlantRegionState is a tuple (location, clock_name, clock_region) */
-template <typename LocationT>
-struct PlantRegionState
-{
-	/** The location of the plant region state */
-	LocationT location;
-	/** The clock name of this region state */
-	std::string clock;
-	/** The region index (regionalized clock valuation) of the clock in this state */
-	RegionIndex region_index;
-};
-
-/** Compare two plant region states.
- * @param s1 The first state
- * @param s2 The second state
- * @return true if s1 is lexicographically smaller than s2
- */
-template <typename LocationT>
-bool
-operator<(const PlantRegionState<LocationT> &s1, const PlantRegionState<LocationT> &s2)
-{
-	return std::tie(s1.location, s1.clock, s1.region_index)
-	       < std::tie(s2.location, s2.clock, s2.region_index);
-}
-
-/** Check two plant region states for equality.
- * Two plant region states are considered equal if they have the same location, clock name, and
- * region index.
- * @param s1 The first state
- * @param s2 The second state
- * @return true if s1 is equal to s2
- */
-template <typename LocationT>
-bool
-operator==(const PlantRegionState<LocationT> &s1, const PlantRegionState<LocationT> &s2)
-{
-	return !(s1 < s2) && !(s2 < s1);
-}
-
-/** @brief A regionalized ATA state.
- *
- * An ATARegionState is a pair (formula, clock_region) */
-template <typename ConstraintSymbolType>
-struct ATARegionState
-{
-	/** The ATA formula in the regionalized ATA state */
-	logic::MTLFormula<ConstraintSymbolType> formula;
-	/** The region index of the state */
-	RegionIndex region_index;
-};
-
-/** Compare two ATA region states.
- * @param s1 The first state
- * @param s2 The second state
- * @return true if s1 is lexicographically smaller than s2
- */
-template <typename LocationT>
-bool
-operator<(const ATARegionState<LocationT> &s1, const ATARegionState<LocationT> &s2)
-{
-	return std::tie(s1.formula, s1.region_index) < std::tie(s2.formula, s2.region_index);
-}
-
-/** Check two ATA region states for equality.
- * Two ATA region states are considered equal if they have the same location and region
- * index.
- * @param s1 The first state
- * @param s2 The second state
- * @return true if s1 is equal to s2
- */
-template <typename LocationT>
-bool
-operator==(const ATARegionState<LocationT> &s1, const ATARegionState<LocationT> &s2)
-{
-	return !(s1 < s2) && !(s2 < s1);
-}
-
-/** @brief The zone state of a plant state.
- *
- * A PlantZoneState is a tuple (location, clock_name, set of clock constraints) */
-template <typename LocationT>
-struct PlantZoneState
-{
-	/** The location of the plant zone state */
-	LocationT location;
-	/** The clock name of this zone state */
-	std::string clock;
-	/** The index for the set of clock constraints */
-	RegionIndex constraints;
-};
-
-/** Compare two plant zone states.
- * @param s1 The first state
- * @param s2 The second state
- * @return true if s1 is lexicographically smaller than s2
- */
-template <typename LocationT>
-bool
-operator<(const PlantZoneState<LocationT> &s1, const PlantZoneState<LocationT> &s2)
-{
-	return std::tie(s1.location, s1.clock, s1.constraints)
-	       < std::tie(s2.location, s2.clock, s2.constraints);
-}
-
-/** Check two plant zone states for equality.
- * Two plant zone states are considered equal if they have the same location, clock name, and
- * clock constraint index.
- * @param s1 The first state
- * @param s2 The second state
- * @return true if s1 is equal to s2
- */
-template <typename LocationT>
-bool
-operator==(const PlantZoneState<LocationT> &s1, const PlantZoneState<LocationT> &s2)
-{
-	return !(s1 < s2) && !(s2 < s1);
-}
-
-/** @brief The zone state of an ATA state
- * 
- * An ATAZoneState is a pair (location, set of clock constraints) */
-template <typename ConstraintSymbolType>
-struct ATAZoneState
-{
-	/** The ATA formula in the zone ATA state */
-	logic::MTLFormula<ConstraintSymbolType> formula;
-	/** The index of the set of clock constraints */
-	RegionIndex constraints;
-};
-
-/** Compare two ATA zone states.
- * @param s1 The first state
- * @param s2 The second state
- * @return true if s1 is lexicographically smaller than s2
- */
-template <typename ConstraintSymbolType>
-bool
-operator<(const ATAZoneState<ConstraintSymbolType> &s1, const ATAZoneState<ConstraintSymbolType> &s2)
-{
-	return std::tie(s1.formula, s1.constraints) < std::tie(s2.formula, s2.constraints);
-}
-
-/** Check two ATA zone states for equality.
- * Two ATA zone states are considered equal if they have the same location and clock constraint
- * index.
- * @param s1 The first state
- * @param s2 The second state
- * @return true if s1 is equal to s2
- */
-template <typename ConstraintSymbolType>
-bool
-operator==(const ATAZoneState<ConstraintSymbolType> &s1, const ATAZoneState<ConstraintSymbolType> &s2)
-{
-	return !(s1 < s2) && !(s2 < s1);
-}
 
 /** An ABRegionSymbol is either a TARegionState or an ATARegionState, or the zone variants */
 template <typename LocationT, typename ConstraintSymbolType>
@@ -233,7 +41,7 @@ using CanonicalABWord = std::vector<std::set<ABRegionSymbol<LocationT, Constrain
  */
 template <typename Location, typename ConstraintSymbolType>
 ClockValuation
-get_time(const ABSymbol<Location,#include "automata_zones.hpp" ConstraintSymbolType> &w)
+get_time(const ABSymbol<Location, ConstraintSymbolType> &w)
 {
 	if (std::holds_alternative<PlantState<Location>>(w)) {
 		return std::get<PlantState<Location>>(w).clock_valuation;
@@ -252,9 +60,9 @@ RegionIndex
 get_region_index(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
 {
 	if (std::holds_alternative<PlantRegionState<Location>>(w)) {
-		return std::get<PlantRegionState<Location>>(w).region_index;
+		return std::get<PlantRegionState<Location>>(w).symbolic_valuation;
 	} else if (std::holds_alternative<ATARegionState<ConstraintSymbolType>>(w)) {
-		return std::get<ATARegionState<ConstraintSymbolType>>(w).region_index;
+		return std::get<ATARegionState<ConstraintSymbolType>>(w).symbolic_valuation;
 	} else if(std::holds_alternative<PlantZoneState<Location>>(w)) {
 		return std::get<PlantZoneState<Location>>(w).constraints;
 	} else {
@@ -423,13 +231,13 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 			  [&](const ABSymbol &w) -> ABRegionSymbol {
 				  if (std::holds_alternative<PlantState<Location>>(w)) {
 					  const PlantState<Location> &s = std::get<PlantState<Location>>(w);
-					  return PlantRegionState<Location>{s.location,
+					  return PlantRegionState<Location>(s.location,
 					                                    s.clock,
-					                                    regionSet.getRegionIndex(s.clock_valuation)};
+					                                    regionSet.getRegionIndex(s.clock_valuation));
 				  } else {
 					  const ATAState<ConstraintSymbolType> &s = std::get<ATAState<ConstraintSymbolType>>(w);
-					  return ATARegionState<ConstraintSymbolType>{s.location,
-					                                              regionSet.getRegionIndex(s.clock_valuation)};
+					  return ATARegionState<ConstraintSymbolType>(s.location,
+					                                              regionSet.getRegionIndex(s.clock_valuation));
 				  }
 			  });
 			abs.push_back(abs_i);
@@ -445,42 +253,6 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 }
 
 //TODO Make some output functions for ostream etc.
-
-/** Print a PlantRegionState. */
-template <typename LocationT>
-std::ostream &
-operator<<(std::ostream &os, const search::PlantRegionState<LocationT> &state)
-{
-	os << "(" << state.location << ", " << state.clock << ", " << state.region_index << ")";
-	return os;
-}
-
-/** Print an ATARegionState. */
-template <typename ConstraintSymbolType>
-std::ostream &
-operator<<(std::ostream &os, const search::ATARegionState<ConstraintSymbolType> &state)
-{
-	os << "(" << state.formula << ", " << state.region_index << ")";
-	return os;
-}
-
-/** Print a PlantZoneState. */
-template <typename LocationT>
-std::ostream &
-operator<<(std::ostream &os, const search::PlantZoneState<LocationT> &state)
-{
-	os << "(" << state.location << ", " << state.clock << ", " << state.constraints << ")";
-	return os;
-}
-
-/** Print an ATAZoneState. */
-template <typename ConstraintSymbolType>
-std::ostream &
-operator<<(std::ostream &os, const search::ATAZoneState<ConstraintSymbolType> &state)
-{
-	os << "(" << state.formula << ", " << state.constraints << ")";
-	return os;
-}
 
 /** Print an ABRegionSymbol. */
 template <typename LocationT, typename ConstraintSymbolType>
@@ -656,26 +428,6 @@ operator<<(std::ostream                                                         
 } // namespace tacos::search
 
 namespace fmt {
-
-template <typename LocationT>
-struct formatter<tacos::search::PlantRegionState<LocationT>> : ostream_formatter
-{
-};
-
-template <typename ConstraintSymbolType>
-struct formatter<tacos::search::ATARegionState<ConstraintSymbolType>> : ostream_formatter
-{
-};
-
-template <typename LocationT>
-struct formatter<tacos::search::PlantZoneState<LocationT>> : ostream_formatter
-{
-};
-
-template <typename ConstraintSymbolType>
-struct formatter<tacos::search::ATAZoneState<ConstraintSymbolType>> : ostream_formatter
-{
-};
 
 template <typename LocationT, typename ConstraintSymbolType>
 struct formatter<tacos::search::ABRegionSymbol<LocationT, ConstraintSymbolType>> : ostream_formatter

@@ -56,7 +56,7 @@ add_search_node_to_graph(
 						program_label = s.str();
 					}
 					partition_labels.push_back(
-					  fmt::format("({}, {})", plant_location.clock, plant_location.region_index));
+					  fmt::format("({}, {})", plant_location.clock, plant_location.symbolic_valuation));
 				} else {
 					std::stringstream str;
 					str << symbol;

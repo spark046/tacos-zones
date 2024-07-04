@@ -38,7 +38,7 @@ get_constraints_from_time_successor(const search::CanonicalABWord<LocationT, Act
 			assert(std::holds_alternative<TARegionState>(region_state));
 			const TARegionState state = std::get<TARegionState>(region_state);
 			for (const auto &constraint : automata::ta::get_clock_constraints_from_region_index(
-			       state.region_index, max_region_index, bound_type)) {
+			       state.symbolic_valuation, max_region_index, bound_type)) {
 				res.insert({{state.clock, constraint}});
 			}
 		}
