@@ -312,13 +312,13 @@ struct PlantZoneState : ZoneState<LocationT>
  * 
  * An ATAZoneState is a pair (location, set of clock constraints) */
 template <typename ConstraintSymbolType>
-struct ATAZoneState : ZoneState<ConstraintSymbolType>
+struct ATAZoneState : ZoneState<logic::MTLFormula<ConstraintSymbolType>>
 {
 	//saving a mouthful
 	using ConstraintSet = std::multimap<std::string, automata::ClockConstraint>;
 
-	ATAZoneState(ConstraintSymbolType formula, ConstraintSet constraints) :
-	ZoneState<ConstraintSymbolType>::ZoneState(formula, "", constraints)
+	ATAZoneState(logic::MTLFormula<ConstraintSymbolType> formula, ConstraintSet constraints) :
+	ZoneState<logic::MTLFormula<ConstraintSymbolType>>::ZoneState(formula, "", constraints)
 	{
 
 	}

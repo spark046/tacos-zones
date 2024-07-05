@@ -9,6 +9,7 @@
 #pragma once
 
 #include "automata/ata.h"
+#include "automata/automata_zones.h"
 
 #include <fmt/ostream.h>
 #include "symbolic_state.h"
@@ -25,12 +26,16 @@ namespace tacos::search {
 template <typename LocationT, typename ConstraintSymbolType>
 using ABSymbol = std::variant<PlantState<LocationT>, ATAState<ConstraintSymbolType>>;
 
-/** An ABRegionSymbol is either a TARegionState or an ATARegionState */
+/** An ABRegionSymbol is either a TARegionState or an ATARegionState, or it is either a PlantZoneState or an ATAZoneState.
+ * 
+ * For any CanonicalABWord, an ABRegionSymbol cannot contain both Region and Zone states.
+ */
 template <typename LocationT, typename ConstraintSymbolType>
 using ABRegionSymbol =
-  std::variant<PlantRegionState<LocationT>, ATARegionState<ConstraintSymbolType>>;
+	std::variant<PlantRegionState<LocationT>, ATARegionState<ConstraintSymbolType>,
+				 PlantZoneState<LocationT>, ATAZoneState<ConstraintSymbolType>>;
 
-/** A canonical word H(s) for a regionalized A/B configuration */
+/** A canonical word H(s) for a symbolic A/B configuration */
 template <typename LocationT, typename ConstraintSymbolT>
 using CanonicalABWord = std::vector<std::set<ABRegionSymbol<LocationT, ConstraintSymbolT>>>;
 
@@ -51,6 +56,8 @@ get_time(const ABSymbol<Location, ConstraintSymbolType> &w)
 
 /** Get the region index for a regionalized ABRegionSymbol, which is either a
  * TARegionState or an ATARegionState.
+ * 
+ * If ABRegionSymbol was actually its zone variant, an error  occured.
  * @param w The symbol to read the time from
  * @return The region index in the given state.
  */
@@ -60,8 +67,32 @@ get_region_index(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
 {
 	if (std::holds_alternative<PlantRegionState<Location>>(w)) {
 		return std::get<PlantRegionState<Location>>(w).symbolic_valuation;
-	} else {
+	} else if (std::holds_alternative<ATARegionState<ConstraintSymbolType>>(w)) {
 		return std::get<ATARegionState<ConstraintSymbolType>>(w).symbolic_valuation;
+	} else {
+		assert(false);
+		return -1;
+	}
+}
+
+/** Get the set of constraints for a ABRegionSymbol using zones, which is either a
+ * TAZoneState or an ATAZoneState.
+ * 
+ * If ABRegionSymbol was actually its region variant, an error  occured.
+ * @param w The symbol to read the time from
+ * @return A multimap representing the set of constraints that constitute the zone.
+ */
+template <typename Location, typename ConstraintSymbolType>
+std::multimap<std::string, automata::ClockConstraint>
+get_zone(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
+{
+	if (std::holds_alternative<PlantZoneState<Location>>(w)) {
+		return std::get<PlantZoneState<Location>>(w).symbolic_valuation;
+	} else if (std::holds_alternative<ATAZoneState<Location>>(w)) {
+		return std::get<ATAZoneState<ConstraintSymbolType>>(w).symbolic_valuation;
+	} else {
+		assert(false);
+		return {};
 	}
 }
 
@@ -83,8 +114,8 @@ public:
 	 */
 	template <typename Location, typename ConstraintSymbolType>
 	explicit InvalidCanonicalWordException(
-	  const CanonicalABWord<Location, ConstraintSymbolType> &word,
-	  const std::string                                     &error)
+		const CanonicalABWord<Location, ConstraintSymbolType> &word,
+		const std::string                                     &error)
 	: std::domain_error("")
 	{
 		std::stringstream msg;
@@ -114,7 +145,7 @@ private:
 template <typename Location, typename ConstraintSymbolType>
 bool
 is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &word,
-                        RegionIndex                                            max_region = 0)
+												RegionIndex                                            max_region = 0)
 {
 	// TODO all ta_symbols should agree on the same location
 	// TODO clocks must have unique values (i.e., must not occur multiple times)
@@ -123,8 +154,8 @@ is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &w
 	}
 	// No configuration should be empty
 	if (std::any_of(word.begin(), word.end(), [](const auto &configurations) {
-		    return configurations.empty();
-	    })) {
+				return configurations.empty();
+			})) {
 		throw InvalidCanonicalWordException(word, "word contains an empty configuration");
 	}
 	// Each partition either contains only even or only odd region indexes. This is because the word
@@ -133,25 +164,25 @@ is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &w
 	// the same partition, as that configuration's fractional part would be > 0.
 	std::for_each(word.begin(), word.end(), [&word](const auto &configurations) {
 		if (std::any_of(configurations.begin(),
-		                configurations.end(),
-		                [](const auto &w) { return get_region_index(w) % 2 == 0; })
-		    && std::any_of(configurations.begin(), configurations.end(), [](const auto &w) {
-			       return get_region_index(w) % 2 == 1;
-		       })) {
+										configurations.end(),
+										[](const auto &w) { return get_region_index(w) % 2 == 0; })
+				&& std::any_of(configurations.begin(), configurations.end(), [](const auto &w) {
+						 return get_region_index(w) % 2 == 1;
+					 })) {
 			throw InvalidCanonicalWordException(word, "both odd and even region indexes");
 		}
 	});
 	// There must be no configuration with a region larger than the max region index.
 	if (max_region > 0) {
 		if (std::any_of(word.begin(), word.end(), [max_region](const auto &configurations) {
-			    return std::any_of(configurations.begin(),
-			                       configurations.end(),
-			                       [max_region](const auto &w) {
-				                       return get_region_index(w) > max_region;
-			                       });
-		    })) {
+					return std::any_of(configurations.begin(),
+														 configurations.end(),
+														 [max_region](const auto &w) {
+															 return get_region_index(w) > max_region;
+														 });
+				})) {
 			throw InvalidCanonicalWordException(
-			  word, "word contains configuration with a region larger than the max region");
+				word, "word contains configuration with a region larger than the max region");
 		};
 	}
 	// There must be at most one partition with fractional part 0.
@@ -161,10 +192,34 @@ is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &w
 		std::for_each(configurations.begin(), configurations.end(), [&word](const auto &w) {
 			if (get_region_index(w) % 2 == 0) {
 				throw InvalidCanonicalWordException(word,
-				                                    "fractional part 0 in wrong element of partition");
+																						"fractional part 0 in wrong element of partition");
 			}
 		});
 	});
+
+	// There cannot be both regionalized ABSymbols and ABSymbols using zones.
+	//Check whether the "first" element is regionalized or not, we then check whether the rest matches
+	bool regionalized = (std::holds_alternative<PlantRegionState<Location>>(*word[0].begin()) || std::holds_alternative<ATARegionState<ConstraintSymbolType>>(*word[0].begin()) );
+
+	std::for_each(word.begin(), word.end(), [&word, regionalized](const auto &configurations) {
+		if(regionalized) {
+			if (std::any_of(configurations.begin(),
+							configurations.end(),
+							[](const auto &w) { return (std::holds_alternative<PlantZoneState<Location>>(w) || std::holds_alternative<ATAZoneState<ConstraintSymbolType>>(w)); }))
+			{
+				throw InvalidCanonicalWordException(word, "Word contains both regionalized and zone configurations");
+			}
+		} else {
+			if (std::any_of(configurations.begin(),
+							configurations.end(),
+							[](const auto &w) { return (std::holds_alternative<PlantRegionState<Location>>(w) || std::holds_alternative<ATARegionState<ConstraintSymbolType>>(w)); }))
+			{
+				throw InvalidCanonicalWordException(word, "Word contains both regionalized and zone configurations");
+			}
+		}
+		
+	});
+
 	return true;
 }
 
@@ -181,16 +236,18 @@ is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &w
  * configuration)
  * @param ata_configuration The configuration of the alternating timed automaton B
  * @param K The value of the largest constant any clock may be compared to
- * @param zones Whether the canonical word is for a zone construction
+ * @param zones Whether the canonical word is for a zone construction. Default is false
+ * @param clock_constraints Set of all constraints of the automata in question. Default is an empty set, if zones aren't used
  * @return The canonical word representing the state s, as a sorted vector of
  * sets of tuples (triples from A and pairs from B).
  */
 template <typename Location, typename ConstraintSymbolType>
 CanonicalABWord<Location, ConstraintSymbolType>
 get_canonical_word(const PlantConfiguration<Location>           &plant_configuration,
-                   const ATAConfiguration<ConstraintSymbolType> &ata_configuration,
-                   const unsigned int                            K,
-				   const bool zones = false)
+				   const ATAConfiguration<ConstraintSymbolType> &ata_configuration,
+				   const unsigned int                            K,
+				   const bool zones = false,
+				   std::multimap<std::string, automata::ClockConstraint> clock_constraints = {})
 {
 	using ABSymbol       = ABSymbol<Location, ConstraintSymbolType>;
 	using ABRegionSymbol = ABRegionSymbol<Location, ConstraintSymbolType>;
@@ -207,10 +264,10 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 	}
 	// Sort into partitions by the fractional parts.
 	std::map<ClockValuation, std::set<ABSymbol>, utilities::ApproxFloatComparator<Time>>
-	  partitioned_g(utilities::ApproxFloatComparator<Time>{});
+		partitioned_g(utilities::ApproxFloatComparator<Time>{});
 	for (const ABSymbol &symbol : g) {
 		partitioned_g[utilities::getFractionalPart<int, ClockValuation>(get_time(symbol))].insert(
-		  symbol);
+			symbol);
 	}
 
 	if(!zones) {
@@ -220,21 +277,21 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 		for (const auto &[fractional_part, g_i] : partitioned_g) {
 			std::set<ABRegionSymbol> abs_i;
 			std::transform(
-			  g_i.begin(),
-			  g_i.end(),
-			  std::inserter(abs_i, abs_i.end()),
-			  [&](const ABSymbol &w) -> ABRegionSymbol {
-				  if (std::holds_alternative<PlantState<Location>>(w)) {
-					  const PlantState<Location> &s = std::get<PlantState<Location>>(w);
-					  return PlantRegionState<Location>(s.location,
-					                                    s.clock,
-					                                    regionSet.getRegionIndex(s.clock_valuation));
-				  } else {
-					  const ATAState<ConstraintSymbolType> &s = std::get<ATAState<ConstraintSymbolType>>(w);
-					  return ATARegionState<ConstraintSymbolType>(s.location,
-					                                              regionSet.getRegionIndex(s.clock_valuation));
-				  }
-			  });
+				g_i.begin(),
+				g_i.end(),
+				std::inserter(abs_i, abs_i.end()),
+				[&](const ABSymbol &w) -> ABRegionSymbol {
+					if (std::holds_alternative<PlantState<Location>>(w)) {
+						const PlantState<Location> &s = std::get<PlantState<Location>>(w);
+						return PlantRegionState<Location>(s.location,
+														  s.clock,
+														  regionSet.getRegionIndex(s.clock_valuation));
+					} else {
+						const ATAState<ConstraintSymbolType> &s = std::get<ATAState<ConstraintSymbolType>>(w);
+						return ATARegionState<ConstraintSymbolType>(s.location,
+																	regionSet.getRegionIndex(s.clock_valuation));
+					}
+				});
 			abs.push_back(abs_i);
 		}
 		assert(is_valid_canonical_word(abs, 2 * K + 1));
@@ -242,6 +299,37 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 	} else {
 		//TODO: For each clock valuation v, zones(v) is the set of all clock constraints that are fulfilled by v
 		CanonicalABWord<Location, ConstraintSymbolType> abs;
+
+		for (const auto &[fractional_part, g_i] : partitioned_g) {
+			std::set<ABRegionSymbol> abs_i;
+			std::transform(
+				g_i.begin(),
+				g_i.end(),
+				std::inserter(abs_i, abs_i.end()),
+				[&](const ABSymbol &w) -> ABRegionSymbol {
+					if (std::holds_alternative<PlantState<Location>>(w)) {
+						const PlantState<Location> &s = std::get<PlantState<Location>>(w);
+
+						std::multimap<std::string, automata::ClockConstraint> zone =
+							zones::get_fulfilled_clock_constraints(clock_constraints, s.clock, s.clock_valuation);
+
+						return PlantZoneState<Location>(s.location,
+														s.clock,
+														zone);
+					} else {
+						const ATAState<ConstraintSymbolType> &s = std::get<ATAState<ConstraintSymbolType>>(w);
+
+						std::multimap<std::string, automata::ClockConstraint> zone =
+							zones::get_fulfilled_clock_constraints(clock_constraints, "", s.clock_valuation);
+
+						return ATAZoneState<ConstraintSymbolType>(s.location,
+																  zone);
+					}
+				});
+			abs.push_back(abs_i);
+		}
+		assert(is_valid_canonical_word(abs, 2 * K + 1));
+
 		return abs;
 	}
 	
@@ -262,7 +350,7 @@ operator<<(std::ostream &os, const search::ABRegionSymbol<LocationT, ConstraintS
 template <typename LocationT, typename ConstraintSymbolType>
 std::ostream &
 operator<<(std::ostream                                                            &os,
-           const std::set<search::ABRegionSymbol<LocationT, ConstraintSymbolType>> &word)
+		   const std::set<search::ABRegionSymbol<LocationT, ConstraintSymbolType>> &word)
 {
 	if (word.empty()) {
 		os << "{}";
@@ -286,8 +374,8 @@ operator<<(std::ostream                                                         
 template <typename LocationT, typename ConstraintSymbolType>
 std::ostream &
 operator<<(
-  std::ostream                                                                         &os,
-  const std::vector<std::set<search::ABRegionSymbol<LocationT, ConstraintSymbolType>>> &word)
+	std::ostream                                                                         &os,
+	const std::vector<std::set<search::ABRegionSymbol<LocationT, ConstraintSymbolType>>> &word)
 {
 	if (word.empty()) {
 		os << "[]";
@@ -311,7 +399,7 @@ operator<<(
 template <typename LocationT, typename ConstraintSymbolType>
 std::ostream &
 operator<<(std::ostream                                                                &os,
-           const std::vector<search::CanonicalABWord<LocationT, ConstraintSymbolType>> &ab_words)
+		   const std::vector<search::CanonicalABWord<LocationT, ConstraintSymbolType>> &ab_words)
 {
 	if (ab_words.empty()) {
 		os << "{}";
@@ -335,8 +423,8 @@ operator<<(std::ostream                                                         
 template <typename ActionT, typename LocationT, typename ConstraintSymbolType>
 std::ostream &
 operator<<(
-  std::ostream                                                                           &os,
-  const std::multimap<ActionT, search::CanonicalABWord<LocationT, ConstraintSymbolType>> &ab_words)
+	std::ostream                                                                           &os,
+	const std::multimap<ActionT, search::CanonicalABWord<LocationT, ConstraintSymbolType>> &ab_words)
 {
 	if (ab_words.empty()) {
 		os << "{}";
@@ -360,12 +448,12 @@ operator<<(
 template <typename LocationT, typename ActionType, typename ConstraintSymbolType>
 std::ostream &
 operator<<(std::ostream                                                               &os,
-           const std::tuple<RegionIndex,
-                            ActionType,
-                            search::CanonicalABWord<LocationT, ConstraintSymbolType>> &ab_word)
+		   const std::tuple<RegionIndex,
+							ActionType,
+							search::CanonicalABWord<LocationT, ConstraintSymbolType>> &ab_word)
 {
 	os << "(" << std::get<0>(ab_word) << ", " << std::get<1>(ab_word) << ", " << std::get<2>(ab_word)
-	   << ")";
+		 << ")";
 	return os;
 }
 
@@ -373,10 +461,10 @@ operator<<(std::ostream                                                         
 template <typename LocationT, typename ActionType, typename ConstraintSymbolType>
 std::ostream &
 operator<<(
-  std::ostream &os,
-  const std::vector<
-    std::tuple<RegionIndex, ActionType, search::CanonicalABWord<LocationT, ConstraintSymbolType>>>
-    &ab_words)
+	std::ostream &os,
+	const std::vector<
+		std::tuple<RegionIndex, ActionType, search::CanonicalABWord<LocationT, ConstraintSymbolType>>>
+		&ab_words)
 {
 	if (ab_words.empty()) {
 		os << "{}";
@@ -400,7 +488,7 @@ operator<<(
 template <typename LocationT, typename ConstraintSymbolType>
 std::ostream &
 operator<<(std::ostream                                                             &os,
-           const std::set<search::CanonicalABWord<LocationT, ConstraintSymbolType>> &ab_words)
+		   const std::set<search::CanonicalABWord<LocationT, ConstraintSymbolType>> &ab_words)
 {
 	if (ab_words.empty()) {
 		os << "{}";

@@ -5,6 +5,7 @@
 
 #include "automata.h"
 #include "ta.h"
+#include "ata.h"
 
 namespace tacos::zones {
 	
@@ -36,14 +37,28 @@ namespace tacos::zones {
 
 	/**
 	 * @brief Returns a set of all clock constraints of a particular timed automaton
-	 * This is done by iterating over all constraints.
 	 * 
-	 * @param timePoint The valuation that is supposed to be checked by the constraints.
+	 * This is done by iterating over all transitions.
+	 * 
+	 * @param ta The automaton in question.
 	 * @return A multimap of Clock Constraints, where the key is a string corresponding to the clock for which the constraint is for, and the values are clock constraints.
 	 */
 	template <typename LocationT, typename AP>
 	std::multimap<std::string, automata::ClockConstraint>
 	get_clock_constraints_of_ta(const automata::ta::TimedAutomaton<LocationT, AP> &ta);
+
+	/**
+	 * @brief Returns a set of all clock constraints of a particular alternating timed automaton
+	 * 
+	 * This is done by iterating over all transitions.
+	 * For consistency with other functions, each clock constraint is still assigned a clock, just that this clock's name will be an emtpy string.
+	 * 
+	 * @param ta The automaton in question.
+	 * @return A multimap of Clock Constraints, where the key is a string corresponding to the clock for which the constraint is for, and the values are clock constraints.
+	 */
+	template <typename LocationT, typename AP>
+	std::multimap<std::string, automata::ClockConstraint>
+	get_clock_constraints_of_ata(const automata::ata::AlternatingTimedAutomaton<LocationT, AP> &ata);
 
 	/**
 	 * @brief Get a multimap of all fulfilled clock constraints by some specific valuation
