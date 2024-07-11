@@ -22,6 +22,7 @@
 namespace tacos::controller_synthesis {
 
 namespace details {
+	//TODO: Understand this
 /** Construct a set of constraints from a time successor CanonicalABWord.
  */
 template <typename LocationT, typename ActionT>
@@ -58,14 +59,14 @@ get_constraints_from_time_successor(const search::CanonicalABWord<LocationT, Act
  * @return A multimap, where each entry is a pair (a, c), where c is a multimap of clock constraints
  * necessary when taking action a.
  */
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename SymbolicRepresentation = RegionIndex>
 std::multimap<ActionT, std::multimap<std::string, automata::ClockConstraint>>
 get_constraints_from_outgoing_action(
   const std::set<search::CanonicalABWord<LocationT, ConstraintSymbolT>> canonical_words,
-  const std::pair<RegionIndex, ActionT> &                               timed_action,
+  const std::pair<SymbolicRepresentation, ActionT> &                    timed_action,
   RegionIndex                                                           K)
 {
-	std::map<ActionT, std::set<RegionIndex>> good_actions;
+	std::map<ActionT, std::set<SymbolicRepresentation>> good_actions;
 	// TODO merging of the constraints is broken because we now get only a single action.
 	good_actions[timed_action.second].insert(timed_action.first);
 

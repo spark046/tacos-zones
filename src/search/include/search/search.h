@@ -68,7 +68,7 @@ has_satisfiable_ata_configuration(
 
 namespace details {
 
-template <typename Location, typename ActionType, typename ConstraintSymbolType>
+template <typename Location, typename ActionType, typename ConstraintSymbolType, typename SymbolicRepresentation = RegionIndex>
 void
 label_graph(SearchTreeNode<Location, ActionType, ConstraintSymbolType> *node,
             const std::set<ActionType>                                 &controller_actions,
@@ -102,8 +102,8 @@ label_graph(SearchTreeNode<Location, ActionType, ConstraintSymbolType> *node,
 			}
 		}
 		bool        has_enviroment_step{false};
-		RegionIndex first_good_controller_step{std::numeric_limits<RegionIndex>::max()};
-		RegionIndex first_bad_environment_step{std::numeric_limits<RegionIndex>::max()};
+		SymbolicRepresentation first_good_controller_step{std::numeric_limits<RegionIndex>::max()};
+		SymbolicRepresentation first_bad_environment_step{std::numeric_limits<RegionIndex>::max()};
 		for (const auto &[timed_action, child] : node->get_children()) {
 			const auto &[step, action] = timed_action;
 			if (controller_actions.find(action) != std::end(controller_actions)) {
@@ -181,7 +181,8 @@ template <typename Location,
           bool use_location_constraints = false,
           typename Plant =
             automata::ta::TimedAutomaton<typename Location::UnderlyingType, ActionType>,
-          bool use_set_semantics = false>
+          bool use_set_semantics = false,
+		  typename SymbolicRepresentation = RegionIndex>
 class TreeSearch
 {
 public:
@@ -216,6 +217,7 @@ public:
 	  RegionIndex                            K,
 	  bool                                   incremental_labeling = false,
 	  bool                                   terminate_early      = false,
+	  bool                                   use_zones = false,
 	  std::unique_ptr<Heuristic<long, Node>> search_heuristic =
 	    std::make_unique<BfsHeuristic<long, Node>>())
 	: ta_(ta),
@@ -242,9 +244,17 @@ public:
 			  ata->make_symbol_step(ata->get_initial_configuration(),
 			                        logic::AtomicProposition<ATAInputType>{{}});
 			std::set<CanonicalABWord<typename Plant::Location, ConstraintSymbolType>> initial_words;
+
+
+			std::set<automata::ClockConstraint> clock_constraints = {};
+			if(use_zones)
+			{
+				clock_constraints = std::merge(zones::get_clock_constraints_of_ta(ta), zones::get_clock_constraints_of_ata(ata));
+			}
+
 			for (const auto &ata_configuration : ata_configurations) {
 				initial_words.insert(
-				  get_canonical_word(ta->get_initial_configuration(), ata_configuration, K));
+				  get_canonical_word(ta->get_initial_configuration(), ata_configuration, K), use_zones, clock_constraints);
 			}
 
 			tree_root_ = std::make_shared<Node>(initial_words);
@@ -253,7 +263,7 @@ public:
 			  std::set<CanonicalABWord<typename Plant::Location, ConstraintSymbolType>>{
 			    get_canonical_word(ta->get_initial_configuration(),
 			                       ata->get_initial_configuration(),
-			                       K)});
+			                       K)}, use_zones, clock_constraints);
 		}
 		nodes_                                  = {{{}, tree_root_}};
 		heuristic                               = std::move(search_heuristic);
@@ -454,7 +464,7 @@ private:
 			return {};
 		}
 		assert(node->get_children().empty());
-		std::map<std::pair<RegionIndex, ActionType>,
+		std::map<std::pair<SymbolicRepresentation, ActionType>,
 		         std::set<CanonicalABWord<Location, ConstraintSymbolType>>>
 		  child_classes;
 

@@ -56,7 +56,7 @@ enum class LabelReason {
 
 /** @brief A node in the search tree
  * @see TreeSearch */
-template <typename Location, typename ActionType, typename ConstraintSymbolType = ActionType>
+template <typename Location, typename ActionType, typename ConstraintSymbolType = ActionType, typename SymbolicRepresentation = RegionIndex>
 class SearchTreeNode
 {
 public:
@@ -175,10 +175,10 @@ public:
 		// respect to time). Also keep track of yet unlabelled nodes (both cases, environmental and
 		// controller action).
 		constexpr auto max = std::numeric_limits<RegionIndex>::max();
-		RegionIndex    first_good_controller_step{max};
-		RegionIndex    first_non_bad_controller_step{max};
-		RegionIndex    first_non_good_environment_step{max};
-		RegionIndex    first_bad_environment_step{max};
+		SymbolicRepresentation    first_good_controller_step{max};
+		SymbolicRepresentation    first_non_bad_controller_step{max};
+		SymbolicRepresentation    first_non_good_environment_step{max};
+		SymbolicRepresentation    first_bad_environment_step{max};
 		bool           has_enviroment_step{false};
 		for (const auto &[timed_action, child] : children) {
 			// Copy label to avoid races while checking the conditions below.
@@ -272,7 +272,7 @@ public:
 	 * @param node The new child
 	 */
 	void
-	add_child(const std::pair<RegionIndex, ActionType> &action, std::shared_ptr<SearchTreeNode> node)
+	add_child(const std::pair<SymbolicRepresentation, ActionType> &action, std::shared_ptr<SearchTreeNode> node)
 	{
 		if (!children.insert(std::make_pair(action, node)).second) {
 			throw std::invalid_argument(fmt::format("\n{}\nCannot add child node \n{}\n, node already "
@@ -304,13 +304,13 @@ public:
 	/** A more detailed description for the node that explains the current label. */
 	LabelReason label_reason = LabelReason::UNKNOWN;
 	/** The current regionalized minimal total time to reach this node */
-	RegionIndex min_total_region_increments = std::numeric_limits<RegionIndex>::max();
+	SymbolicRepresentation min_total_region_increments = std::numeric_limits<RegionIndex>::max();
 
 private:
 	/** A list of the children of the node, which are reachable by a single transition */
 	// TODO change container with custom comparator to set to avoid duplicates (also better
 	// performance)
-	std::map<std::pair<RegionIndex, ActionType>, std::shared_ptr<SearchTreeNode>> children = {};
+	std::map<std::pair<SymbolicRepresentation, ActionType>, std::shared_ptr<SearchTreeNode>> children = {};
 };
 
 /** Print a node state. */

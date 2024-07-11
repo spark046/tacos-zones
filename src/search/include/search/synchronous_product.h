@@ -191,7 +191,7 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 				// update ta_configuration
 				plant_configuration.location                     = ta_region_state.location;
 				plant_configuration.clock_valuations[clock_name] = integral_part + fractional_part;
-			} else { // ATARegionState<ConstraintSymbolType>
+			} else if(std::holds_alternative<ATARegionState<Location>>(symbol)) {
 				const auto       &ata_region_state = std::get<ATARegionState<ConstraintSymbolType>>(symbol);
 				const RegionIndex region_index     = ata_region_state.symbolic_valuation;
 				const Time        fractional_part =
@@ -203,6 +203,162 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 				// sufficient?
 				ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_region_state.location,
 				                                                        fractional_part + integral_part});
+			} else if(std::holds_alternative<PlantZoneState<Location>>(symbol)) {
+				const auto &ta_zone_state = std::get<PlantZoneState<Location>>(symbol);
+				const std::multimap<std::string, automata::ClockConstraint> zone = ta_zone_state.symbolic_valuation;
+
+				//TODO if the zone is an empty set, i.e. there are constraints that contradict each other, this needs to be implemented, even if this doesn't normally happen (probably)
+
+				std::map<std::string, ClockValuation> min_valuation;
+				std::map<std::string, ClockValuation> max_valuation;
+
+				//find the minimum and maximum values for each clock
+				for(auto constraint = zone.begin(); constraint != zone.end(); constraint++)
+				{
+					const auto &clock_name = constraint->first;
+					min_valuation[clock_name] = DBL_MAX;
+					max_valuation[clock_name] = 0;
+
+					int relation = automata::get_relation_index(constraint->second);
+
+					if(relation == 0) { //less
+						ClockValuation new_valuation = constraint->second + time_delta * static_cast<Time>((i + 1));
+
+						if(new_valuation > max_valuation[clock_name]) {
+							max_valuation[clock_name] = new_valuation;
+						}
+					} else if (relation == 1) { //less equal
+						ClockValuation new_valuation = constraint->second;
+
+						if(new_valuation > max_valuation[clock_name]) {
+							max_valuation[clock_name] = new_valuation;
+						}
+					} else if (relation == 4) { //greater equal
+						ClockValuation new_valuation = constraint->second;
+
+						if(new_valuation < min_valuation[clock_name]) {
+							min_valuation[clock_name] = new_valuation;
+						}
+					} else if (relation == 5) { //greater
+						ClockValuation new_valuation = constraint->second - time_delta * static_cast<Time>((i + 1));
+
+						if(new_valuation < min_valuation[clock_name]) {
+							min_valuation[clock_name] = new_valuation;
+						}
+					}
+				}
+
+				for(auto valuation = min_valuation.begin(); valuation != min_valuation.end(); valuation++)
+				{
+					const auto &clock_name = valuation->first;
+					plant_configuration.location                     = ta_zone_state.location;
+					plant_configuration.clock_valuations[clock_name] = valuation->second;
+				}
+
+				//Make sure the clock valuations fulfill in-/equality constraints
+				for(auto constraint = zone.begin(); constraint != zone.end(); constraint++)
+				{
+					const auto &clock_name = constraint->first;
+
+					int relation = automata::get_relation_index(constraint->second);
+
+					if(relation == 2) { //equal
+						plant_configuration.location                     = ta_zone_state.location;
+						plant_configuration.clock_valuations[clock_name] = constraint->second;
+					} else if(relation == 3) { //not equal
+						if(plant_configuration.clock_valuations.find(clock_name) == plant_configuration.clock_valuations.end()) { // If the clock doesn't have a valuation yet, then there are no other constraints for this clock, i.e. it can be any fractional value TODO: Improve method
+							plant_configuration.location                     = ta_zone_state.location;
+							plant_configuration.clock_valuations[clock_name] = time_delta * static_cast<Time>((i + 1));
+						} else {
+							Endpoint constant = std::visit([](const auto &atomic_clock_constraint)
+											-> Time { return atomic_clock_constraint.get_comparand(); },
+											constraint->second);
+
+							if(plant_configuration.clock_valuations[clock_name] == (ClockValuation) constant) {
+								if(plant_configuration.clock_valuations[clock_name] < max_valuation[clock_name]) {
+									plant_configuration.clock_valuations[clock_name] = max_valuation[clock_name];
+								} else if(plant_configuration.clock_valuations[clock_name] > min_valuation[clock_name]) {
+									plant_configuration.clock_valuations[clock_name] = min_valuation[clock_name];
+								}
+							}
+						}
+					}
+				}
+
+			} else { //ATAZoneState
+				const auto &ata_zone_state = std::get<ATAZoneState<Location>>(symbol);
+				const std::multimap<std::string, automata::ClockConstraint> zone = ata_zone_state.symbolic_valuation;
+
+				//TODO if the zone is an empty set, i.e. there are constraints that contradict each other, this needs to be implemented, even if this doesn't normally happen (probably)
+
+				//Final valuation of the clock
+				ClockValuation return_time = 0;
+
+				ClockValuation min_valuation;
+				ClockValuation max_valuation;
+
+				//find the minimum and maximum values
+				for(auto constraint = zone.begin(); constraint != zone.end(); constraint++)
+				{
+					min_valuation = DBL_MAX;
+					max_valuation = 0;
+
+					int relation = automata::get_relation_index(constraint->second);
+
+					if(relation == 0) { //less
+						ClockValuation new_valuation = constraint->second + time_delta * static_cast<Time>((i + 1));
+
+						if(new_valuation > max_valuation) {
+							max_valuation = new_valuation;
+						}
+					} else if (relation == 1) { //less equal
+						ClockValuation new_valuation = constraint->second;
+
+						if(new_valuation > max_valuation) {
+							max_valuation = new_valuation;
+						}
+					} else if (relation == 4) { //greater equal
+						ClockValuation new_valuation = constraint->second;
+
+						if(new_valuation < min_valuation) {
+							min_valuation = new_valuation;
+						}
+					} else if (relation == 5) { //greater
+						ClockValuation new_valuation = constraint->second - time_delta * static_cast<Time>((i + 1));
+
+						if(new_valuation < min_valuation) {
+							min_valuation = new_valuation;
+						}
+					}
+				}
+
+				//Make sure the clock valuations fulfill in-/equality constraints
+				for(auto constraint = zone.begin(); constraint != zone.end(); constraint++)
+				{
+					int relation = automata::get_relation_index(constraint->second);
+
+					if(relation == 2) { //equal
+						plant_configuration.location                     = ta_region_state.location;
+						plant_configuration.clock_valuations = constraint->second;
+					} else if(relation == 3) { //not equal
+						if(plant_configuration.clock_valuations.find(clock_name) == plant_configuration.clock_valuations.end()) { // If the clock doesn't have a valuation yet, then there are no other constraints for this clock, i.e. it can be any fractional value TODO: Improve method
+							plant_configuration.location                     = ta_region_state.location;
+							plant_configuration.clock_valuations = time_delta * static_cast<Time>((i + 1));
+						} else {
+							Endpoint constant = std::visit([](const auto &atomic_clock_constraint)
+											-> Time { return atomic_clock_constraint.get_comparand(); },
+											constraint->second);
+
+							if(plant_configuration.clock_valuations == (ClockValuation) constant) {
+								if(plant_configuration.clock_valuations < max_valuation) {
+									plant_configuration.clock_valuations = max_valuation;
+								} else if(plant_configuration.clock_valuations > min_valuation) {
+									plant_configuration.clock_valuations = min_valuation;
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 	}
@@ -228,20 +384,29 @@ get_nth_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &wo
  * @param K The maximal constant
  * @return All time successors of the word along with the region increment to reach the successor
  */
-template <typename Location, typename ConstraintSymbolType>
-std::vector<std::pair<RegionIndex, CanonicalABWord<Location, ConstraintSymbolType>>>
+template <typename Location, typename ConstraintSymbolType, typename SymbolicRepresentation = RegionIndex>
+std::vector<std::pair<SymbolicRepresentation, CanonicalABWord<Location, ConstraintSymbolType>>>
 get_time_successors(const CanonicalABWord<Location, ConstraintSymbolType> &canonical_word,
                     RegionIndex                                            K)
 {
 	SPDLOG_TRACE("Computing time successors of {} with K={}", canonical_word, K);
 	auto        cur = get_time_successor(canonical_word, K);
-	RegionIndex cur_index{0};
-	std::vector<std::pair<RegionIndex, CanonicalABWord<Location, ConstraintSymbolType>>>
+
+	std::vector<std::pair<SymbolicRepresentation, CanonicalABWord<Location, ConstraintSymbolType>>>
 	  time_successors;
-	time_successors.push_back(std::make_pair(cur_index++, canonical_word));
-	for (; cur != time_successors.back().second; cur_index++) {
-		time_successors.emplace_back(cur_index, cur);
-		cur = get_time_successor(time_successors.back().second, K);
+
+	if(is_region_canonical_word(word)) //SymbolicRepresentation should be RegionIndex hereafter
+	{
+		SymbolicRepresentation cur_index{0};
+		
+		time_successors.push_back(std::make_pair(cur_index++, canonical_word));
+		for (; cur != time_successors.back().second; cur_index++) {
+			time_successors.emplace_back(cur_index, cur);
+			cur = get_time_successor(time_successors.back().second, K);
+		}
+	} else { //zones
+		//TODO: finish get_time_successor
+		
 	}
 	return time_successors;
 }
