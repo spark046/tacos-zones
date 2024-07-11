@@ -27,12 +27,25 @@ namespace tacos::zones {
 	template <typename LocationT, typename AP>
 	std::multimap<std::string, automata::ClockConstraint>
 	get_clock_constraints_of_ata(const automata::ata::AlternatingTimedAutomaton<LocationT, AP> &ata) {
-		//using Transition = automata::ata::Transition<LocationT, AP>;
+		using Transition = automata::ata::Transition<LocationT, AP>;
+		using Formula = automata::ata::Formula<LocationT>;
+		using ClockConstraintFormula = automata::ata::ClockConstraintFormula<LocationT>;
 
 		//multimap to be returned
 		std::multimap<std::string, automata::ClockConstraint> ret = {};
 
-		//TODO somehow get all transitions of ata and also extract the clock constraints
+		std::set<Transition> transitions = ata.get_transitions();
+
+		for(auto iter1 = transitions.begin(); iter1 != transitions.end(); iter1++)
+		{
+			Formula *formula = iter1.get_formula();
+
+			dynamic_cast<ClockConstraintFormula*> (formula);
+			if(formula != NULL)
+			{
+				ret.insert("", formula.get_constraint());
+			}
+		}
 		
 		return ret;
 	}

@@ -206,6 +206,11 @@ public:
 	bool is_satisfied(const std::set<State<LocationT>> &, const ClockValuation &v) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &v) const override;
 
+	ClockConstraint get_constraint()
+	{
+		return constraint_;
+	}
+
 protected:
 	/** Print a ClockConstraintFormula to an ostream
 	 * @param os The ostream to print to

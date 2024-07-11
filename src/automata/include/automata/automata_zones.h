@@ -54,7 +54,7 @@ namespace tacos::zones {
 	 * For consistency with other functions, each clock constraint is still assigned a clock, just that this clock's name will be an emtpy string.
 	 * 
 	 * @param ta The automaton in question.
-	 * @return A multimap of Clock Constraints, where the key is a string corresponding to the clock for which the constraint is for, and the values are clock constraints.
+	 * @return A multimap of Clock Constraints, where the key is an empty string representing the single clock of the ATA, and the values are clock constraints.
 	 */
 	template <typename LocationT, typename AP>
 	std::multimap<std::string, automata::ClockConstraint>

@@ -19,7 +19,7 @@ target_link_libraries(test_clock PRIVATE automata Catch2::Catch2WithMain)
 catch_discover_tests(test_clock)
 
 add_executable(test_zonefunctions test_zonefunctions.cpp)
-target_link_libraries(test_zonefunctions PRIVATE automata search Catch2::Catch2WithMain)
+target_link_libraries(test_zonefunctions PRIVATE automata search mtl_ata_translation mtl Catch2::Catch2WithMain)
 catch_discover_tests(test_zonefunctions)
 
 add_executable(testta test_ta.cpp test_ta_region.cpp test_ta_print.cpp test_ta_product.cpp)

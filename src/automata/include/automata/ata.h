@@ -144,12 +144,16 @@ public:
 	           const SymbolT                      &symbol,
 	           std::unique_ptr<Formula<LocationT>> formula);
 
+	Formula<LocationT> get_formula()
+	{
+		return std::move(*formula_);
+	}
+
 public:
 	/// The source location of the transition
 	const LocationT source_;
 	/// The symbol this transition can fire on
 	const SymbolT symbol_;
-
 private:
 	std::unique_ptr<Formula<LocationT>> formula_;
 };
@@ -184,6 +188,20 @@ public:
 	get_alphabet() const
 	{
 		return alphabet_;
+	}
+
+	/** Get the  transitions of this automaton */
+	const std::set<Transition<LocationT, SymbolT>>
+	get_transitions() const
+	{
+		std::set<Transition<LocationT, SymbolT>> ret = {};
+
+		for(auto iter1 = transitions_.begin(); iter1 != transitions_.end(); iter1++)
+		{
+			ret.insert(std::move(*iter1));
+		}
+
+		return ret;
 	}
 
 	/** Compute the resulting configurations after making a symbol step.
