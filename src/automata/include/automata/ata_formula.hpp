@@ -57,6 +57,13 @@ TrueFormula<LocationT>::print_to_ostream(std::ostream &os) const
 }
 
 template <typename LocationT>
+std::set<automata::ClockConstraint>
+TrueFormula<LocationT>::get_clock_constraints() const
+{
+	return {};
+}
+
+template <typename LocationT>
 bool
 FalseFormula<LocationT>::is_satisfied(const std::set<State<LocationT>> &,
                                       const ClockValuation &) const
@@ -79,6 +86,13 @@ FalseFormula<LocationT>::print_to_ostream(std::ostream &os) const
 }
 
 template <typename LocationT>
+std::set<automata::ClockConstraint>
+FalseFormula<LocationT>::get_clock_constraints() const
+{
+	return {};
+}
+
+template <typename LocationT>
 bool
 LocationFormula<LocationT>::is_satisfied(const std::set<State<LocationT>> &states,
                                          const ClockValuation             &v) const
@@ -98,6 +112,13 @@ void
 LocationFormula<LocationT>::print_to_ostream(std::ostream &os) const
 {
 	os << location_;
+}
+
+template <typename LocationT>
+std::set<automata::ClockConstraint>
+LocationFormula<LocationT>::get_clock_constraints() const
+{
+	return {};
 }
 
 template <typename LocationT>
@@ -124,6 +145,13 @@ void
 ClockConstraintFormula<LocationT>::print_to_ostream(std::ostream &os) const
 {
 	os << "x " << constraint_;
+}
+
+template <typename LocationT>
+std::set<automata::ClockConstraint>
+ClockConstraintFormula<LocationT>::get_clock_constraints() const
+{
+	return {constraint_};
 }
 
 template <typename LocationT>
@@ -155,6 +183,20 @@ void
 ConjunctionFormula<LocationT>::print_to_ostream(std::ostream &os) const
 {
 	os << "(" << *conjunct1_ << u8" ∧ " << *conjunct2_ << ")";
+}
+
+template <typename LocationT>
+std::set<automata::ClockConstraint>
+ConjunctionFormula<LocationT>::get_clock_constraints() const
+{
+	std::set<automata::ClockConstraint> ret;
+	std::set<automata::ClockConstraint> s1 = conjunct1_->get_clock_constraints();
+	std::set<automata::ClockConstraint> s2 = conjunct2_->get_clock_constraints();
+
+	ret.insert(s1.begin(), s1.end());
+	ret.insert(s2.begin(), s2.end());
+
+	return ret;
 }
 
 template <typename LocationT>
@@ -210,6 +252,20 @@ DisjunctionFormula<LocationT>::print_to_ostream(std::ostream &os) const
 }
 
 template <typename LocationT>
+std::set<automata::ClockConstraint>
+DisjunctionFormula<LocationT>::get_clock_constraints() const
+{
+	std::set<automata::ClockConstraint> ret = {};
+	std::set<automata::ClockConstraint> s1 = disjunct1_->get_clock_constraints();
+	std::set<automata::ClockConstraint> s2 = disjunct2_->get_clock_constraints();
+
+	ret.insert(s1.begin(), s1.end());
+	ret.insert(s2.begin(), s2.end());
+
+	return ret;
+}
+
+template <typename LocationT>
 bool
 ResetClockFormula<LocationT>::is_satisfied(const std::set<State<LocationT>> &states,
                                            const ClockValuation &) const
@@ -229,6 +285,13 @@ void
 ResetClockFormula<LocationT>::print_to_ostream(std::ostream &os) const
 {
 	os << "x." << *sub_formula_;
+}
+
+template <typename LocationT>
+std::set<automata::ClockConstraint>
+ResetClockFormula<LocationT>::get_clock_constraints() const
+{
+	return sub_formula_->get_clock_constraints();
 }
 
 template <typename LocationT>

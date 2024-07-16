@@ -19,6 +19,7 @@
 #include <range/v3/view.hpp>
 #include <type_traits>
 #include <utility>
+#include <set>
 
 namespace tacos::automata::ata {
 /** A state of an ATA.
@@ -121,6 +122,8 @@ public:
 	friend std::ostream & operator<< <>(std::ostream &os, const Formula &formula);
 	// clang-format on
 
+	virtual std::set<automata::ClockConstraint> get_clock_constraints() const = 0;
+
 protected:
 	/** A virtual method to print a Formula to an ostream. We cannot just use
 	 * operator<<, as the operator cannot be virtual. The function needs to be
@@ -138,6 +141,7 @@ class TrueFormula : public Formula<LocationT>
 public:
 	bool is_satisfied(const std::set<State<LocationT>> &, const ClockValuation &) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &) const override;
+	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
 	/** Print a TrueFormula to an ostream
@@ -153,6 +157,7 @@ class FalseFormula : public Formula<LocationT>
 public:
 	bool is_satisfied(const std::set<State<LocationT>> &, const ClockValuation &) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &) const override;
+	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
 	/** Print a FalseFormula to an ostream
@@ -177,6 +182,7 @@ public:
 	bool                                 is_satisfied(const std::set<State<LocationT>> &states,
 	                                                  const ClockValuation             &v) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &v) const override;
+	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
 	/** Print a LocationFormula to an ostream
@@ -205,6 +211,7 @@ public:
 	}
 	bool is_satisfied(const std::set<State<LocationT>> &, const ClockValuation &v) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &v) const override;
+	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
 	/** Print a ClockConstraintFormula to an ostream
@@ -239,6 +246,7 @@ public:
 	                  const ClockValuation             &v) const override;
 
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &v) const override;
+	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
 	/** Print a ConjunctionFormula to an ostream
@@ -273,6 +281,7 @@ public:
 	bool                                 is_satisfied(const std::set<State<LocationT>> &states,
 	                                                  const ClockValuation             &v) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &v) const override;
+	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
 	/** Print a DisjunctionFormula to an ostream
@@ -304,6 +313,7 @@ public:
 	bool                                 is_satisfied(const std::set<State<LocationT>> &states,
 	                                                  const ClockValuation &) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &) const override;
+	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
 	/** Print a ResetClockFormula to an ostream

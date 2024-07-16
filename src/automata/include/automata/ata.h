@@ -144,6 +144,12 @@ public:
 	           const SymbolT                      &symbol,
 	           std::unique_ptr<Formula<LocationT>> formula);
 
+	std::set<automata::ClockConstraint>
+	get_clock_constraints() const
+	{
+		return formula_->get_clock_constraints();
+	}
+
 public:
 	/// The source location of the transition
 	const LocationT source_;
@@ -241,6 +247,20 @@ public:
 	friend std::ostream &
 	operator<< <>(std::ostream &os, const AlternatingTimedAutomaton &ata);
 	// clang-format on
+
+	std::set<automata::ClockConstraint>
+	get_clock_constraints() const
+	{
+		std::set<automata::ClockConstraint> ret = {};
+
+		for(auto iter1 = transitions_.begin(); iter1 != transitions_.end(); iter1++)
+		{
+			std::set<automata::ClockConstraint> curr_set = iter1->get_clock_constraints();
+			ret.insert(curr_set.begin(), curr_set.end());
+		}
+
+		return ret;
+	}
 
 private:
 	std::set<std::set<State<LocationT>>> get_minimal_models(Formula<LocationT> *formula,
