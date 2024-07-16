@@ -28,7 +28,8 @@ using ABSymbol = std::variant<PlantState<LocationT>, ATAState<ConstraintSymbolTy
 /** An ABRegionSymbol is either a TARegionState or an ATARegionState */
 template <typename LocationT, typename ConstraintSymbolType>
 using ABRegionSymbol =
-  std::variant<PlantRegionState<LocationT>, ATARegionState<ConstraintSymbolType>>;
+  std::variant<PlantRegionState<LocationT>, ATARegionState<ConstraintSymbolType>,
+			   PlantZoneState<LocationT>, ATAZoneState<ConstraintSymbolType> >;
 
 /** A canonical word H(s) for a regionalized A/B configuration */
 template <typename LocationT, typename ConstraintSymbolT>
@@ -166,6 +167,21 @@ is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &w
 		});
 	});
 	return true;
+}
+
+/**
+ * @brief Checks whether a canonical word is using regions or not.
+ * 
+ * @param canonical_word The canonical word being checked
+ * @return True if canonical word uses region, false if it uses zones (or is invalid)
+ */
+template <typename Location, typename ConstraintSymbolType>
+bool
+is_region_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &word)
+{
+	assert(is_valid_canonical_word(word));
+
+	return (std::holds_alternative<PlantRegionState<Location>>(*word[0].begin()) || std::holds_alternative<ATARegionState<ConstraintSymbolType>>(*word[0].begin()) );
 }
 
 /** Get the canonical word H(s) for the given A/B configuration s, closely

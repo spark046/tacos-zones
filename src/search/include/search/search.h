@@ -68,7 +68,7 @@ has_satisfiable_ata_configuration(
 
 namespace details {
 
-template <typename Location, typename ActionType, typename ConstraintSymbolType>
+template <typename Location, typename ActionType, typename ConstraintSymbolType, typename SymbolicRepresentation = RegionIndex>
 void
 label_graph(SearchTreeNode<Location, ActionType, ConstraintSymbolType> *node,
             const std::set<ActionType>                                 &controller_actions,
@@ -102,8 +102,8 @@ label_graph(SearchTreeNode<Location, ActionType, ConstraintSymbolType> *node,
 			}
 		}
 		bool        has_enviroment_step{false};
-		RegionIndex first_good_controller_step{std::numeric_limits<RegionIndex>::max()};
-		RegionIndex first_bad_environment_step{std::numeric_limits<RegionIndex>::max()};
+		SymbolicRepresentation first_good_controller_step{std::numeric_limits<RegionIndex>::max()};
+		SymbolicRepresentation first_bad_environment_step{std::numeric_limits<RegionIndex>::max()};
 		for (const auto &[timed_action, child] : node->get_children()) {
 			const auto &[step, action] = timed_action;
 			if (controller_actions.find(action) != std::end(controller_actions)) {
@@ -181,7 +181,9 @@ template <typename Location,
           bool use_location_constraints = false,
           typename Plant =
             automata::ta::TimedAutomaton<typename Location::UnderlyingType, ActionType>,
-          bool use_set_semantics = false>
+          bool use_set_semantics = false,
+		  bool use_zones = false,
+		  typename SymbolicRepresentation = RegionIndex>
 class TreeSearch
 {
 public:
@@ -454,7 +456,7 @@ private:
 			return {};
 		}
 		assert(node->get_children().empty());
-		std::map<std::pair<RegionIndex, ActionType>,
+		std::map<std::pair<SymbolicRepresentation, ActionType>,
 		         std::set<CanonicalABWord<Location, ConstraintSymbolType>>>
 		  child_classes;
 

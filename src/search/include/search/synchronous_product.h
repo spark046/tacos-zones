@@ -25,6 +25,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include <variant>
+#include <float.h>
 
 namespace tacos::search {
 
@@ -34,7 +35,7 @@ namespace tacos::search {
  * @param max_region_index The maximal region index that may never be passed
  * @return A copy of the given configurations with incremented region indexes
  */
-template <typename Location, typename ConstraintSymbolType>
+template <typename Location, typename ConstraintSymbolType, typename SymbolicRepresentation = RegionIndex>
 std::set<ABRegionSymbol<Location, ConstraintSymbolType>>
 increment_region_indexes(
   const std::set<ABRegionSymbol<Location, ConstraintSymbolType>> &configurations,
@@ -57,7 +58,7 @@ increment_region_indexes(
 	               [max_region_index](auto configuration) {
 		               if (std::holds_alternative<PlantRegionState<Location>>(configuration)) {
 			               auto &ta_configuration = std::get<PlantRegionState<Location>>(configuration);
-			               RegionIndex &region_index = ta_configuration.symbolic_valuation;
+			               SymbolicRepresentation &region_index = ta_configuration.symbolic_valuation;
 			               // Increment if the region index is less than the max_region_index and if the
 			               // region index is even or if we increment all region indexes.
 			               if (region_index < max_region_index) {
@@ -66,7 +67,7 @@ increment_region_indexes(
 		               } else {
 			               auto &ata_configuration =
 			                 std::get<ATARegionState<ConstraintSymbolType>>(configuration);
-			               RegionIndex &region_index = ata_configuration.symbolic_valuation;
+			               SymbolicRepresentation &region_index = ata_configuration.symbolic_valuation;
 			               // Increment if the region index is less than the max_region_index and if the
 			               // region index is even or if we increment all region indexes.
 			               if (region_index < max_region_index) {
@@ -169,7 +170,7 @@ get_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word, 
  * @return std::pair<TAConfiguration<Location>, ATAConfiguration<ConstraintSymbolType>> A pair of
  * TA- and ATA-state which can be represented by the passed canonical word
  */
-template <typename Location /* TA::Location */, typename ConstraintSymbolType>
+template <typename Location /* TA::Location */, typename ConstraintSymbolType, typename SymbolicRepresentation = RegionIndex>
 std::pair<PlantConfiguration<Location>, ATAConfiguration<ConstraintSymbolType>>
 get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 {
@@ -183,26 +184,199 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 			// TODO Refactor, fractional/integral outside of if
 			if (std::holds_alternative<PlantRegionState<Location>>(symbol)) {
 				const auto       &ta_region_state = std::get<PlantRegionState<Location>>(symbol);
-				const RegionIndex region_index    = ta_region_state.symbolic_valuation;
+				const SymbolicRepresentation region_index    = ta_region_state.symbolic_valuation;
 				const Time        fractional_part =
           region_index % 2 == 0 ? 0 : time_delta * static_cast<Time>((i + 1));
-				const Time  integral_part = static_cast<RegionIndex>(region_index / 2);
+				const Time  integral_part = static_cast<SymbolicRepresentation>(region_index / 2);
 				const auto &clock_name    = ta_region_state.clock;
 				// update ta_configuration
 				plant_configuration.location                     = ta_region_state.location;
 				plant_configuration.clock_valuations[clock_name] = integral_part + fractional_part;
-			} else { // ATARegionState<ConstraintSymbolType>
+			} else if(std::holds_alternative<ATARegionState<ConstraintSymbolType>>(symbol)) { // ATARegionState<ConstraintSymbolType>
 				const auto       &ata_region_state = std::get<ATARegionState<ConstraintSymbolType>>(symbol);
-				const RegionIndex region_index     = ata_region_state.symbolic_valuation;
+				const SymbolicRepresentation region_index     = ata_region_state.symbolic_valuation;
 				const Time        fractional_part =
           region_index % 2 == 0 ? 0 : time_delta * static_cast<Time>((i + 1));
-				const Time integral_part = static_cast<RegionIndex>(region_index / 2);
+				const Time integral_part = static_cast<SymbolicRepresentation>(region_index / 2);
 				// update configuration
 				// TODO check: the formula (aka ConstraintSymbolType) encodes the location, the clock
 				// valuation is separate and a configuration is a set of such pairs. Is this already
 				// sufficient?
 				ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_region_state.location,
 				                                                        fractional_part + integral_part});
+			} else if(std::holds_alternative<PlantZoneState<Location>>(symbol)) {
+				const auto &ta_zone_state = std::get<PlantZoneState<Location>>(symbol);
+				const std::multimap<std::string, automata::ClockConstraint> zone = ta_zone_state.symbolic_valuation;
+
+				//TODO if the zone is an empty set, i.e. there are constraints that contradict each other, this needs to be implemented, even if this doesn't normally happen (probably)
+
+				std::map<std::string, Time> min_valuation;
+				std::map<std::string, Time> max_valuation;
+
+				//find the minimum and maximum values for each clock
+				for(auto constraint = zone.begin(); constraint != zone.end(); constraint++)
+				{
+					const auto &clock_name = constraint->first;
+					min_valuation[clock_name] = DBL_MAX;
+					max_valuation[clock_name] = 0;
+
+					std::optional<int> relation_opt = automata::get_relation_index(constraint->second);
+					assert(relation_opt.has_value());
+					int relation = relation_opt.value();
+
+					Time comparand = (Time) std::visit([](const auto &atomic_clock_constraint)
+											-> Time { return atomic_clock_constraint.get_comparand(); },
+											constraint->second);
+
+					if(relation == 0) { //less
+						Time new_valuation = comparand + time_delta * static_cast<Time>((i + 1));
+
+						if(new_valuation > max_valuation[clock_name]) {
+							max_valuation[clock_name] = new_valuation;
+						}
+					} else if (relation == 1) { //less equal
+						Time new_valuation = comparand;
+
+						if(new_valuation > max_valuation[clock_name]) {
+							max_valuation[clock_name] = new_valuation;
+						}
+					} else if (relation == 4) { //greater equal
+						Time new_valuation = comparand;
+
+						if(new_valuation < min_valuation[clock_name]) {
+							min_valuation[clock_name] = new_valuation;
+						}
+					} else if (relation == 5) { //greater
+						Time new_valuation = comparand - time_delta * static_cast<Time>((i + 1));
+
+						if(new_valuation < min_valuation[clock_name]) {
+							min_valuation[clock_name] = new_valuation;
+						}
+					}
+				}
+
+				for(auto valuation = min_valuation.begin(); valuation != min_valuation.end(); valuation++)
+				{
+					const auto &clock_name = valuation->first;
+					plant_configuration.location                     = ta_zone_state.location;
+					plant_configuration.clock_valuations[clock_name] = valuation->second;
+				}
+
+				//Make sure the clock valuations fulfill in-/equality constraints
+				for(auto constraint = zone.begin(); constraint != zone.end(); constraint++)
+				{
+					const auto &clock_name = constraint->first;
+
+					std::optional<int> relation_opt = automata::get_relation_index(constraint->second);
+					assert(relation_opt.has_value());
+					int relation = relation_opt.value();
+
+					Time comparand = (Time) std::visit([](const auto &atomic_clock_constraint)
+											-> Time { return atomic_clock_constraint.get_comparand(); },
+											constraint->second);
+
+					if(relation == 2) { //equal
+						plant_configuration.location                     = ta_zone_state.location;
+						plant_configuration.clock_valuations[clock_name] = comparand;
+					} else if(relation == 3) { //not equal
+						if(plant_configuration.clock_valuations.find(clock_name) == plant_configuration.clock_valuations.end()) { // If the clock doesn't have a valuation yet, then there are no other constraints for this clock, i.e. it can be any fractional value TODO: Improve method
+							plant_configuration.location                     = ta_zone_state.location;
+							plant_configuration.clock_valuations[clock_name] = time_delta * static_cast<Time>((i + 1));
+						} else {
+							if(plant_configuration.clock_valuations[clock_name] == comparand) {
+								if(plant_configuration.clock_valuations[clock_name] < max_valuation[clock_name]) {
+									plant_configuration.clock_valuations[clock_name] = max_valuation[clock_name];
+								} else if(plant_configuration.clock_valuations[clock_name] > min_valuation[clock_name]) {
+									plant_configuration.clock_valuations[clock_name] = min_valuation[clock_name];
+								}
+							}
+						}
+					}
+				}
+
+			} else { //ATAZoneState
+				const auto &ata_zone_state = std::get<ATAZoneState<ConstraintSymbolType>>(symbol);
+				const std::multimap<std::string, automata::ClockConstraint> zone = ata_zone_state.symbolic_valuation;
+
+				//TODO if the zone is an empty set, i.e. there are constraints that contradict each other, this needs to be implemented, even if this doesn't normally happen (probably)
+
+				//Final valuation of the clock
+				Time return_time = 0;
+
+				Time min_valuation;
+				Time max_valuation;
+
+				//find the minimum and maximum values
+				for(auto constraint = zone.begin(); constraint != zone.end(); constraint++)
+				{
+					min_valuation = DBL_MAX;
+					max_valuation = 0;
+
+					std::optional<int> relation_opt = automata::get_relation_index(constraint->second);
+					assert(relation_opt.has_value());
+					int relation = relation_opt.value();
+
+					Time comparand = (Time) std::visit([](const auto &atomic_clock_constraint)
+											-> Time { return atomic_clock_constraint.get_comparand(); },
+											constraint->second);
+
+					if(relation == 0) { //less
+						Time new_valuation = comparand + time_delta * static_cast<Time>((i + 1));
+
+						if(new_valuation > max_valuation) {
+							max_valuation = new_valuation;
+						}
+					} else if (relation == 1) { //less equal
+						Time new_valuation = comparand;
+
+						if(new_valuation > max_valuation) {
+							max_valuation = new_valuation;
+						}
+					} else if (relation == 4) { //greater equal
+						Time new_valuation = comparand;
+
+						if(new_valuation < min_valuation) {
+							min_valuation = new_valuation;
+						}
+					} else if (relation == 5) { //greater
+						Time new_valuation = comparand - time_delta * static_cast<Time>((i + 1));
+
+						if(new_valuation < min_valuation) {
+							min_valuation = new_valuation;
+						}
+					}
+				}
+
+				//we assume min_valuation is not larger than max_valuation
+				assert(min_valuation <= max_valuation);
+
+				return_time = min_valuation;
+
+				//Make sure the clock valuations fulfill in-/equality constraints
+				for(auto constraint = zone.begin(); constraint != zone.end(); constraint++)
+				{
+					std::optional<int> relation_opt = automata::get_relation_index(constraint->second);
+					assert(relation_opt.has_value());
+					int relation = relation_opt.value();
+
+					Time comparand = (Time) std::visit([](const auto &atomic_clock_constraint)
+											-> Time { return atomic_clock_constraint.get_comparand(); },
+											constraint->second);
+
+					if(relation == 2) { //equal
+						return_time = comparand;
+					} else if(relation == 3) { //not equal
+						if(return_time == comparand) {
+							if(return_time < max_valuation) {
+								return_time = return_time + time_delta * static_cast<Time>((i + 1));
+							} else {
+								return_time = return_time - time_delta * static_cast<Time>((i + 1));
+							}
+						}
+					}
+				}
+
+				ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_zone_state.location, return_time});
 			}
 		}
 	}
@@ -228,15 +402,15 @@ get_nth_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &wo
  * @param K The maximal constant
  * @return All time successors of the word along with the region increment to reach the successor
  */
-template <typename Location, typename ConstraintSymbolType>
-std::vector<std::pair<RegionIndex, CanonicalABWord<Location, ConstraintSymbolType>>>
+template <typename Location, typename ConstraintSymbolType, typename SymbolicRepresentation = RegionIndex>
+std::vector<std::pair<SymbolicRepresentation, CanonicalABWord<Location, ConstraintSymbolType>>>
 get_time_successors(const CanonicalABWord<Location, ConstraintSymbolType> &canonical_word,
                     RegionIndex                                            K)
 {
 	SPDLOG_TRACE("Computing time successors of {} with K={}", canonical_word, K);
 	auto        cur = get_time_successor(canonical_word, K);
-	RegionIndex cur_index{0};
-	std::vector<std::pair<RegionIndex, CanonicalABWord<Location, ConstraintSymbolType>>>
+	SymbolicRepresentation cur_index{0};
+	std::vector<std::pair<SymbolicRepresentation, CanonicalABWord<Location, ConstraintSymbolType>>>
 	  time_successors;
 	time_successors.push_back(std::make_pair(cur_index++, canonical_word));
 	for (; cur != time_successors.back().second; cur_index++) {
