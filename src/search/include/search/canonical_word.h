@@ -61,8 +61,10 @@ get_region_index(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
 {
 	if (std::holds_alternative<PlantRegionState<Location>>(w)) {
 		return std::get<PlantRegionState<Location>>(w).symbolic_valuation;
-	} else {
+	} else if(std::holds_alternative<ATARegionState<ConstraintSymbolType>>(w)) {
 		return std::get<ATARegionState<ConstraintSymbolType>>(w).symbolic_valuation;
+	} else { //TODO: Do some fallback in case this function was called for zones.
+		return -1;
 	}
 }
 

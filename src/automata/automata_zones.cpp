@@ -23,4 +23,49 @@ namespace tacos::zones {
 		return timePoint;
 	}
 
+	std::ostream &
+	operator<<(std::ostream &os, const zones::Zone_slice &zone_slice)
+	{
+		std::string leftBracket = "[";
+		std::string rightBracket = "]";
+		if(zone_slice.lower_isStrict_)
+		{
+			leftBracket = "(";
+		}
+		if(zone_slice.upper_isStrict_)
+		{
+			rightBracket = ")";
+		}
+
+		os << leftBracket << zone_slice.lower_bound_ << "; " << zone_slice.upper_bound_ << rightBracket;
+		return os;
+	}
+
+	std::ostream &
+	operator<<(std::ostream &os, const std::map<std::string, tacos::zones::Zone_slice> &zone)
+	{
+		if(zone.empty()) {
+			os << "{}";
+			return os;
+		}
+
+		os << "{ ";
+
+		bool first = true;
+
+		for(const auto &[clock, slice] : zone)
+		{
+			if(first) {
+				first = false;
+			} else {
+				os << ", ";
+			}
+			os << slice << "_" << clock;
+		}
+
+		os << " }";
+
+		return os;
+	}
+
 } // namespace tacos::automata

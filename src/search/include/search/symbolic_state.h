@@ -2,12 +2,14 @@
 
 #include "automata/ata.h"
 // TODO Regions should not be TA-specific
+#include "automata/automata_zones.h"
 #include "automata/ta_regions.h"
 #include "mtl/MTLFormula.h"
 #include "utilities/numbers.h"
 #include "utilities/types.h"
 
 #include <fmt/ostream.h>
+#include <float.h>
 
 /** Represents symbolic states used for Canonical Words */
 namespace tacos::search {
@@ -161,15 +163,29 @@ struct ATARegionState : public SymbolicState<logic::MTLFormula<ConstraintSymbolT
  * (This is effectively a PlantZoneState, but is kept seperate to preserve proper inheritance relations with ATAZoneState)
  */
 template <typename LocationType>
-struct ZoneState : public SymbolicState<LocationType, std::multimap<std::string, automata::ClockConstraint>>
+struct ZoneState : public SymbolicState<LocationType, std::map<std::string, zones::Zone_slice>>
 {
 	//saving a mouthful
-	using ConstraintSet = std::multimap<std::string, automata::ClockConstraint>;
+	using ZoneSlices = std::map<std::string, zones::Zone_slice>;
 	//saving a second mouthful
-	using Base = SymbolicState<LocationType, ConstraintSet>;
+	using Base = SymbolicState<LocationType, ZoneSlices>;
 
-	ZoneState(LocationType location_p, std::string clock_p, ConstraintSet constraints_p) : 
+	ZoneState(LocationType location_p, std::string clock_p, ZoneSlices constraints_p) : 
 	Base::SymbolicState(location_p, clock_p, constraints_p)
+	{
+
+	}
+
+	/** Overloaded Constructor allowing the use of a set of ClockConstraints to initialize a ZoneState */
+	ZoneState(LocationType location_p, std::string clock_p, std::multimap<std::string, automata::ClockConstraint> clock_constraint) :
+	Base::SymbolicState(location_p, clock_p, [&clock_constraint](){
+		ZoneSlices ret = {};
+		for(auto iter1 = clock_constraint.begin(); iter1 != clock_constraint.end(); iter1++)
+		{
+			ret.insert( {iter1->first, zones::Zone_slice{iter1->second} } );
+		}
+		return ret;
+	}())
 	{
 
 	}
@@ -186,76 +202,24 @@ struct ZoneState : public SymbolicState<LocationType, std::multimap<std::string,
 	 * 
 	 * @return A multimap consisting of all the new constraints (and missing the unnecessary ones).
 	 */
-	ConstraintSet get_increment_valuation() const
+	ZoneSlices get_increment_valuation() const
 	{
-		ConstraintSet currentSet = Base::symbolic_valuation;
-		ConstraintSet delaySet = {};
+		Endpoint max_valuation = std::numeric_limits<Endpoint>::max(); //TODO: Make this a parameter
+		ZoneSlices currentZone = Base::symbolic_valuation;
+		ZoneSlices delayZone = {};
 
-		//Minimum constant needed to know whether an inequality constraint can be discarded
-		Endpoint minimum_constant = UINT_MAX;
-
-		//Set of inequality constraints that need to be evaluated in the end
-		ConstraintSet inequalityConstraints = {};
-
-		for(auto iter1 = currentSet.begin(); iter1 != currentSet.end(); iter1++)
+		for(auto iter1 = currentZone.begin(); iter1 != currentZone.end(); iter1++)
 		{
-			Endpoint constant = std::visit([](const auto &atomic_clock_constraint)
-											-> Time { return atomic_clock_constraint.get_comparand(); },
-											iter1->second);
-
-			//Update minimum constant for inequality constraints
-			if(constant < minimum_constant)
+			if(iter1->second.upper_bound_ >= max_valuation)
 			{
-				minimum_constant = constant;
-			}
-
-			//Relation index as defined by tacos::automata to find what kind of constraint this is
-			std::optional<size_t> relation = automata::get_relation_index(iter1->second);
-
-			if (!relation.has_value()) //something went wrong
-			{
-				assert(false);
-				return {};
-			}
-			else if(relation == 0 || relation == 1) //less or less_equal constraint
-			{
-				//less/less_equal constraints disappear
-				continue;
-			}
-			else if (relation == 2) //equality constraint
-			{
-				delaySet.insert({iter1->first, automata::AtomicClockConstraintT<std::greater_equal<Time>>(constant)});
-			}
-			else if(relation == 3) //inequality constraint
-			{
-				//Defer whether an inequality constraint belongs in the new constraint set to later, when the definite minimum constant is known
-				inequalityConstraints.insert({iter1->first, iter1->second});
-			}
-			else if(relation == 4 || relation == 5) //greater or greater_equal constraint
-			{
-				delaySet.insert({iter1->first, iter1->second});
-			}
-			else //something went horribly wrong
-			{
-				assert(false);
-				return {};
+				delayZone.insert( {iter1->first, iter1->second} );
+			} else {
+				zones::Zone_slice newSlice = zones::Zone_slice(iter1->second.lower_bound_, max_valuation, iter1->second.lower_isStrict_, false);
+				delayZone.insert( {iter1->first, newSlice} );
 			}
 		}
 
-		//Go through the set of inequality constraints and compare them to the minimum constant to know whether they are worth keeping
-		for (auto iter2 = inequalityConstraints.begin(); iter2 != inequalityConstraints.end(); iter2++)
-		{
-			Endpoint constant = std::visit([](const auto &atomic_clock_constraint)
-											-> Time { return atomic_clock_constraint.get_comparand(); },
-											iter2->second);
-
-			if(constant <= minimum_constant)
-			{
-				delaySet.insert({iter2->first, iter2->second});
-			}
-		}
-
-		return delaySet;
+		return delayZone;
 	}
 
 	/** Compare two zone states.
@@ -299,7 +263,14 @@ template<typename LocationT>
 struct PlantZoneState : ZoneState<LocationT>
 {
 	//saving a mouthful
+	using ZoneSlices = std::map<std::string, zones::Zone_slice>;
 	using ConstraintSet = std::multimap<std::string, automata::ClockConstraint>;
+
+	PlantZoneState(LocationT location, std::string clock, ZoneSlices zone) :
+	ZoneState<LocationT>::ZoneState(location, clock, zone)
+	{
+
+	}
 
 	PlantZoneState(LocationT location, std::string clock, ConstraintSet constraints) :
 	ZoneState<LocationT>::ZoneState(location, clock, constraints)
@@ -315,7 +286,14 @@ template <typename ConstraintSymbolType>
 struct ATAZoneState : ZoneState<logic::MTLFormula<ConstraintSymbolType>>
 {
 	//saving a mouthful
+	using ZoneSlices = std::map<std::string, zones::Zone_slice>;
 	using ConstraintSet = std::multimap<std::string, automata::ClockConstraint>;
+
+	ATAZoneState(ConstraintSymbolType location, std::string clock, ZoneSlices zone) :
+	ZoneState<ConstraintSymbolType>::ZoneState(location, clock, zone)
+	{
+
+	}
 
 	ATAZoneState(logic::MTLFormula<ConstraintSymbolType> formula, ConstraintSet constraints) :
 	ZoneState<logic::MTLFormula<ConstraintSymbolType>>::ZoneState(formula, "", constraints)
