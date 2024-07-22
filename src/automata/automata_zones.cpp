@@ -18,11 +18,6 @@ namespace tacos::zones {
 		return ret;
 	}
 
-	RegionIndex
-	get_clock_constraints(ClockValuation timePoint) {
-		return timePoint;
-	}
-
 	std::ostream &
 	operator<<(std::ostream &os, const zones::Zone_slice &zone_slice)
 	{

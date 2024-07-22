@@ -73,10 +73,9 @@ public:
 	SymbolicRepresentationType symbolic_valuation;
 
 	SymbolicState(LocationType location_p, std::string clock_p, SymbolicRepresentationType symbolic_valuation_p) : 
-	location(location_p)
+	location(location_p), clock(clock_p), symbolic_valuation(symbolic_valuation_p)
 	{
-		clock = clock_p;
-		symbolic_valuation = symbolic_valuation_p;
+		
 	}
 
 	/**
@@ -163,14 +162,14 @@ struct ATARegionState : public SymbolicState<logic::MTLFormula<ConstraintSymbolT
  * (This is effectively a PlantZoneState, but is kept seperate to preserve proper inheritance relations with ATAZoneState)
  */
 template <typename LocationType>
-struct ZoneState : public SymbolicState<LocationType, std::map<std::string, zones::Zone_slice>>
+struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 {
 	//saving a mouthful
-	using ZoneSlices = std::map<std::string, zones::Zone_slice>;
+	using ZoneSlice = zones::Zone_slice;
 	//saving a second mouthful
-	using Base = SymbolicState<LocationType, ZoneSlices>;
+	using Base = SymbolicState<LocationType, ZoneSlice>;
 
-	ZoneState(LocationType location_p, std::string clock_p, ZoneSlices constraints_p) : 
+	ZoneState(LocationType location_p, std::string clock_p, ZoneSlice constraints_p) : 
 	Base::SymbolicState(location_p, clock_p, constraints_p)
 	{
 
@@ -178,11 +177,15 @@ struct ZoneState : public SymbolicState<LocationType, std::map<std::string, zone
 
 	/** Overloaded Constructor allowing the use of a set of ClockConstraints to initialize a ZoneState */
 	ZoneState(LocationType location_p, std::string clock_p, std::multimap<std::string, automata::ClockConstraint> clock_constraint) :
-	Base::SymbolicState(location_p, clock_p, [&clock_constraint](){
-		ZoneSlices ret = {};
+	Base::SymbolicState(location_p, clock_p, [&clock_constraint, &clock_p](){
+		ZoneSlice ret = ZoneSlice(0, std::numeric_limits<Endpoint>::max(), false, false);
+
 		for(auto iter1 = clock_constraint.begin(); iter1 != clock_constraint.end(); iter1++)
 		{
-			ret.insert( {iter1->first, zones::Zone_slice{iter1->second} } );
+			if(iter1->first == clock_p)
+			{
+				ret.conjunct(iter1->second);
+			}
 		}
 		return ret;
 	}())
@@ -202,24 +205,16 @@ struct ZoneState : public SymbolicState<LocationType, std::map<std::string, zone
 	 * 
 	 * @return A multimap consisting of all the new constraints (and missing the unnecessary ones).
 	 */
-	ZoneSlices get_increment_valuation() const
+	ZoneSlice get_increment_valuation() const
 	{
 		Endpoint max_valuation = std::numeric_limits<Endpoint>::max(); //TODO: Make this a parameter
-		ZoneSlices currentZone = Base::symbolic_valuation;
-		ZoneSlices delayZone = {};
 
-		for(auto iter1 = currentZone.begin(); iter1 != currentZone.end(); iter1++)
+		if(Base::symbolic_valuation.upper_bound_ >= max_valuation)
 		{
-			if(iter1->second.upper_bound_ >= max_valuation)
-			{
-				delayZone.insert( {iter1->first, iter1->second} );
-			} else {
-				zones::Zone_slice newSlice = zones::Zone_slice(iter1->second.lower_bound_, max_valuation, iter1->second.lower_isStrict_, false);
-				delayZone.insert( {iter1->first, newSlice} );
-			}
+			return Base::symbolic_valuation;
+		} else {
+			return zones::Zone_slice(Base::symbolic_valuation.lower_bound_, max_valuation, Base::symbolic_valuation.lower_isStrict_, false);
 		}
-
-		return delayZone;
 	}
 
 	/** Compare two zone states.
@@ -263,11 +258,11 @@ template<typename LocationT>
 struct PlantZoneState : ZoneState<LocationT>
 {
 	//saving a mouthful
-	using ZoneSlices = std::map<std::string, zones::Zone_slice>;
+	using ZoneSlice = zones::Zone_slice;
 	using ConstraintSet = std::multimap<std::string, automata::ClockConstraint>;
 
-	PlantZoneState(LocationT location, std::string clock, ZoneSlices zone) :
-	ZoneState<LocationT>::ZoneState(location, clock, zone)
+	PlantZoneState(LocationT location, std::string clock, ZoneSlice zone_slice) :
+	ZoneState<LocationT>::ZoneState(location, clock, zone_slice)
 	{
 
 	}
@@ -286,11 +281,11 @@ template <typename ConstraintSymbolType>
 struct ATAZoneState : ZoneState<logic::MTLFormula<ConstraintSymbolType>>
 {
 	//saving a mouthful
-	using ZoneSlices = std::map<std::string, zones::Zone_slice>;
+	using ZoneSlice = zones::Zone_slice;
 	using ConstraintSet = std::multimap<std::string, automata::ClockConstraint>;
 
-	ATAZoneState(ConstraintSymbolType location, std::string clock, ZoneSlices zone) :
-	ZoneState<ConstraintSymbolType>::ZoneState(location, clock, zone)
+	ATAZoneState(ConstraintSymbolType location, ZoneSlice zone_slice) :
+	ZoneState<ConstraintSymbolType>::ZoneState(location, "", zone_slice)
 	{
 
 	}

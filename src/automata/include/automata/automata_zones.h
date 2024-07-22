@@ -229,14 +229,6 @@
 	 */
 	std::multimap<std::string, automata::ClockConstraint>
 	get_fulfilled_clock_constraints(const std::multimap<std::string, automata::ClockConstraint> allConstraints, std::string clock, ClockValuation val);
-
-	template<typename ThisIsString>
-	std::string
-	test() {
-		ThisIsString s = "Test";
-
-		return s;
-	}
 } //namespace tacos::zones
 
 namespace fmt {

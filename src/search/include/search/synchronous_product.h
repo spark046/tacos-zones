@@ -35,48 +35,131 @@ namespace tacos::search {
  * @param max_region_index The maximal region index that may never be passed
  * @return A copy of the given configurations with incremented region indexes
  */
-template <typename Location, typename ConstraintSymbolType, typename SymbolicRepresentation = RegionIndex>
+template <typename Location, typename ConstraintSymbolType>
 std::set<ABRegionSymbol<Location, ConstraintSymbolType>>
 increment_region_indexes(
   const std::set<ABRegionSymbol<Location, ConstraintSymbolType>> &configurations,
-  RegionIndex                                                     max_region_index)
+  RegionIndex                                                     max_region_index,
+  bool                                                            use_zones = false)
 {
-	// Assert that our assumption holds: All region indexes are either odd or even, never mixed.
-	assert(
-	  std::all_of(std::begin(configurations),
-	              std::end(configurations),
-	              [](const auto &configuration) { return get_region_index(configuration) % 2 == 0; })
-	  || std::all_of(std::begin(configurations),
-	                 std::end(configurations),
-	                 [](const auto &configuration) {
-		                 return get_region_index(configuration) % 2 == 1;
-	                 }));
-	std::set<ABRegionSymbol<Location, ConstraintSymbolType>> res;
-	std::transform(configurations.begin(),
-	               configurations.end(),
-	               std::inserter(res, res.end()),
-	               [max_region_index](auto configuration) {
-		               if (std::holds_alternative<PlantRegionState<Location>>(configuration)) {
-			               auto &ta_configuration = std::get<PlantRegionState<Location>>(configuration);
-			               SymbolicRepresentation &region_index = ta_configuration.symbolic_valuation;
-			               // Increment if the region index is less than the max_region_index and if the
-			               // region index is even or if we increment all region indexes.
-			               if (region_index < max_region_index) {
-				               region_index += 1;
-			               }
-		               } else {
-			               auto &ata_configuration =
-			                 std::get<ATARegionState<ConstraintSymbolType>>(configuration);
-			               SymbolicRepresentation &region_index = ata_configuration.symbolic_valuation;
-			               // Increment if the region index is less than the max_region_index and if the
-			               // region index is even or if we increment all region indexes.
-			               if (region_index < max_region_index) {
-				               region_index += 1;
-			               }
-		               }
-		               return configuration;
-	               });
-	return res;
+	if(!use_zones)
+	{
+		// Assert that our assumption holds: All region indexes are either odd or even, never mixed, and all configurations are regionalized.
+		assert(
+		  std::all_of(std::begin(configurations),
+					  std::end(configurations),
+					  [](const auto &configuration) { return get_region_index(configuration) % 2 == 0; })
+		  || std::all_of(std::begin(configurations),
+						 std::end(configurations),
+						 [](const auto &configuration) {
+							 return get_region_index(configuration) % 2 == 1;
+						 })
+		  || std::all_of(std::begin(configurations),
+		  				 std::end(configurations),
+						 [](const auto &configuration) { return std::holds_alternative<PlantRegionState<Location>>(configuration) || std::holds_alternative<ATARegionState<ConstraintSymbolType>>(configuration);})
+		);
+		std::set<ABRegionSymbol<Location, ConstraintSymbolType>> res;
+		std::transform(configurations.begin(),
+					   configurations.end(),
+					   std::inserter(res, res.end()),
+					   [max_region_index](auto configuration) {
+						   if (std::holds_alternative<PlantRegionState<Location>>(configuration)) {
+							   auto &ta_configuration = std::get<PlantRegionState<Location>>(configuration);
+							   RegionIndex &region_index = ta_configuration.symbolic_valuation;
+							   // Increment if the region index is less than the max_region_index and if the
+							   // region index is even or if we increment all region indexes.
+							   if (region_index < max_region_index) {
+								   region_index += 1;
+							   }
+						   } else {
+							   auto &ata_configuration =
+								 std::get<ATARegionState<ConstraintSymbolType>>(configuration);
+							   RegionIndex &region_index = ata_configuration.symbolic_valuation;
+							   // Increment if the region index is less than the max_region_index and if the
+							   // region index is even or if we increment all region indexes.
+							   if (region_index < max_region_index) {
+								   region_index += 1;
+							   }
+						   }
+						   return configuration;
+					   });
+		return res;
+	} else {
+		//Make sure all configurations use zones
+		assert(
+			std::all_of(std::begin(configurations),
+		  				std::end(configurations),
+						[](const auto &configuration) { return std::holds_alternative<PlantZoneState<Location>>(configuration) || std::holds_alternative<ATAZoneState<ConstraintSymbolType>>(configuration);})
+		);
+
+		std::set<ABRegionSymbol<Location, ConstraintSymbolType>> res;
+		
+		std::transform(configurations.begin(),
+					   configurations.end(),
+					   std::inserter(res, res.end()),
+					   [max_region_index](auto configuration) {
+							if (std::holds_alternative<PlantZoneState<Location>>(configuration)) {
+								PlantZoneState<Location> &ta_configuration = std::get<PlantZoneState<Location>>(configuration);
+
+								//Virtually increment region indexes only. This means:
+								//1. An interval starting/ending at an integer (i.e. closed) gets incremented so that it starts/ends within the next open interval
+								//2. An interval starting/ending within an open interval, gets incremented so that it starts/ends at the next integer
+
+								//If we are at the max, don't care anymore
+								if(ta_configuration.symbolic_valuation.lower_bound_ >= (max_region_index / 2) )
+								{
+									if(ta_configuration.symbolic_valuation.lower_isStrict_) {
+										ta_configuration.symbolic_valuation.lower_isStrict_ = false;
+										ta_configuration.symbolic_valuation.lower_bound_ += 1;
+									} else {
+										ta_configuration.symbolic_valuation.lower_isStrict_ = true;
+									}
+								}
+
+								//If we are at the max, don't care anymore
+								if(ta_configuration.symbolic_valuation.upper_bound_ >= (max_region_index / 2) )
+								{
+									if(ta_configuration.symbolic_valuation.upper_isStrict_) {
+										ta_configuration.symbolic_valuation.upper_isStrict_ = false;
+										ta_configuration.symbolic_valuation.upper_bound_ += 1;
+									} else {
+										ta_configuration.symbolic_valuation.upper_isStrict_ = true;
+									}
+								}
+							} else {
+								auto &ata_configuration =
+								 std::get<ATAZoneState<ConstraintSymbolType>>(configuration);
+								
+								//Virtually increment region indexes only. This means:
+								//1. An interval starting/ending at an integer (i.e. closed) gets incremented so that it starts/ends within the next open interval
+								//2. An interval starting/ending within an open interval, gets incremented so that it starts/ends at the next integer
+
+								//If we are at the max, don't care anymore
+								if(ata_configuration.symbolic_valuation.lower_bound_ >= (max_region_index / 2) )
+								{
+									if(ata_configuration.symbolic_valuation.lower_isStrict_) {
+										ata_configuration.symbolic_valuation.lower_isStrict_ = false;
+										ata_configuration.symbolic_valuation.lower_bound_ += 1;
+									} else {
+										ata_configuration.symbolic_valuation.lower_isStrict_ = true;
+									}
+								}
+
+								//If we are at the max, don't care anymore
+								if(ata_configuration.symbolic_valuation.upper_bound_ >= (max_region_index / 2) )
+								{
+									if(ata_configuration.symbolic_valuation.upper_isStrict_) {
+										ata_configuration.symbolic_valuation.upper_isStrict_ = false;
+										ata_configuration.symbolic_valuation.upper_bound_ += 1;
+									} else {
+										ata_configuration.symbolic_valuation.upper_isStrict_ = true;
+									}
+								}
+							}
+							return configuration;
+						});
+		return res;
+	}
 }
 
 /** Get the CanonicalABWord that directly follows the given word. The next word
@@ -106,10 +189,10 @@ get_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word, 
 	auto last_nonmaxed_partition = std::next(word.rbegin());
 	// Check if maxed partition is actually maxed
 	if (std::all_of(word.rbegin()->begin(),
-	                word.rbegin()->end(),
-	                [&max_region_index](const auto &configuration) {
-		                return get_region_index(configuration) == max_region_index;
-	                })) {
+					word.rbegin()->end(),
+					[&max_region_index](const auto &configuration) {
+						return get_region_index(configuration) == max_region_index;
+					})) {
 		new_maxed_partition = *word.rbegin();
 	} else {
 		// There is no maxed partition, so the last partition is already nonmaxed.
@@ -186,7 +269,7 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 				const auto       &ta_region_state = std::get<PlantRegionState<Location>>(symbol);
 				const RegionIndex region_index    = ta_region_state.symbolic_valuation;
 				const Time        fractional_part =
-          region_index % 2 == 0 ? 0 : time_delta * static_cast<Time>((i + 1));
+		  region_index % 2 == 0 ? 0 : time_delta * static_cast<Time>((i + 1));
 				const Time  integral_part = static_cast<RegionIndex>(region_index / 2);
 				const auto &clock_name    = ta_region_state.clock;
 				// update ta_configuration
@@ -196,44 +279,42 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 				const auto       &ata_region_state = std::get<ATARegionState<ConstraintSymbolType>>(symbol);
 				const RegionIndex region_index     = ata_region_state.symbolic_valuation;
 				const Time        fractional_part =
-          region_index % 2 == 0 ? 0 : time_delta * static_cast<Time>((i + 1));
+		  region_index % 2 == 0 ? 0 : time_delta * static_cast<Time>((i + 1));
 				const Time integral_part = static_cast<RegionIndex>(region_index / 2);
 				// update configuration
 				// TODO check: the formula (aka ConstraintSymbolType) encodes the location, the clock
 				// valuation is separate and a configuration is a set of such pairs. Is this already
 				// sufficient?
 				ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_region_state.location,
-				                                                        fractional_part + integral_part});
+																		fractional_part + integral_part});
 			} else if(std::holds_alternative<PlantZoneState<Location>>(symbol)) {
 				const auto &ta_zone_state = std::get<PlantZoneState<Location>>(symbol);
 
 				const auto &clock_name = ta_zone_state.clock;
-				const std::map<std::string, zones::Zone_slice> zone = ta_zone_state.symbolic_valuation;
+				const zones::Zone_slice zone = ta_zone_state.symbolic_valuation;
 
-				assert(zone.at(clock_name).lower_bound_ <= zone.at(clock_name).upper_bound_); //make sure zone is not empty set
+				assert(zone.lower_bound_ <= zone.upper_bound_); //make sure zone is not empty set
 
 				plant_configuration.location = ta_zone_state.location;
 
-				if(zone.at(clock_name).lower_isStrict_) //Check if we can have an integer or not
+				if(zone.lower_isStrict_) //Check if we can have an integer or not
 				{
-					plant_configuration.clock_valuations.at(clock_name) = ((ClockValuation) zone.at(clock_name).lower_bound_) + time_delta * static_cast<Time>((i + 1));
+					plant_configuration.clock_valuations[clock_name] = ((ClockValuation) zone.lower_bound_) + time_delta * static_cast<Time>((i + 1));
 				} else {
-					plant_configuration.clock_valuations.at(clock_name) = (ClockValuation) zone.at(clock_name).lower_bound_;
+					plant_configuration.clock_valuations[clock_name] = (ClockValuation) zone.lower_bound_;
 				}
 
 			} else { //ATAZoneState
 				const auto &ata_zone_state = std::get<ATAZoneState<ConstraintSymbolType>>(symbol);
+				const zones::Zone_slice zone = ata_zone_state.symbolic_valuation;
 
-				const auto &clock_name = "";
-				const std::map<std::string, zones::Zone_slice> zone = ata_zone_state.symbolic_valuation;
+				assert(zone.lower_bound_ <= zone.upper_bound_); //make sure zone is not empty set
 
-				assert(zone.at(clock_name).lower_bound_ <= zone.at(clock_name).upper_bound_); //make sure zone is not empty set
-
-				if(zone.at(clock_name).lower_isStrict_) //Check if we can have an integer or not
+				if(zone.lower_isStrict_) //Check if we can have an integer or not
 				{
-					ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_zone_state.location, ((ClockValuation) zone.at(clock_name).lower_bound_) + time_delta * static_cast<Time>((i + 1))});
+					ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_zone_state.location, ((ClockValuation) zone.lower_bound_) + time_delta * static_cast<Time>((i + 1))});
 				} else {
-					ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_zone_state.location, (ClockValuation) zone.at(clock_name).lower_bound_});
+					ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_zone_state.location, (ClockValuation) zone.lower_bound_});
 				}
 			}
 		}
@@ -245,8 +326,8 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 template <typename Location, typename ConstraintSymbolType>
 CanonicalABWord<Location, ConstraintSymbolType>
 get_nth_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word,
-                       RegionIndex                                            n,
-                       RegionIndex                                            K)
+					   RegionIndex                                            n,
+					   RegionIndex                                            K)
 {
 	auto res = word;
 	for (RegionIndex i = 0; i < n; i++) {
@@ -263,7 +344,7 @@ get_nth_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &wo
 template <typename Location, typename ConstraintSymbolType, typename SymbolicRepresentation = RegionIndex>
 std::vector<std::pair<SymbolicRepresentation, CanonicalABWord<Location, ConstraintSymbolType>>>
 get_time_successors(const CanonicalABWord<Location, ConstraintSymbolType> &canonical_word,
-                    RegionIndex                                            K)
+					RegionIndex                                            K)
 {
 	SPDLOG_TRACE("Computing time successors of {} with K={}", canonical_word, K);
 	auto        cur = get_time_successor(canonical_word, K);
@@ -294,14 +375,14 @@ get_next_time_successors(
 	}));
 	std::set<CanonicalABWord<Location, ConstraintSymbolType>> successors;
 	std::map<CanonicalABWord<Location, ConstraintSymbolType>,
-	         CanonicalABWord<Location, ConstraintSymbolType>>
+			 CanonicalABWord<Location, ConstraintSymbolType>>
 	  successors_map;
 	for (const auto &word : canonical_words) {
 		successors_map[word] = get_time_successor(word, K);
 	}
 	if (std::any_of(std::begin(successors_map), std::end(successors_map), [](const auto &map_entry) {
-		    return reg_a(map_entry.first) == reg_a(map_entry.second);
-	    })) {
+			return reg_a(map_entry.first) == reg_a(map_entry.second);
+		})) {
 		// There is at least one where the successor has the same reg_a and thus there is an ATA
 		// configuration that is incremented. We must only increments those where there is also an ATA
 		// configuration to increment.

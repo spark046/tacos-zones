@@ -52,21 +52,21 @@ TEST_CASE("Getting fulfilled Clock Constraints", "[zones]")
 TEST_CASE("Delaying zones of zone states", "[zones]")
 {
 	std::multimap<std::string, automata::ClockConstraint> constraint1 = {{"x", automata::AtomicClockConstraintT<std::greater<Time>>(1)}};
-	std::map<std::string, zones::Zone_slice> zone1 = {{"x", zones::Zone_slice(constraint1, "x")}};
+	zones::Zone_slice zone1 = zones::Zone_slice(constraint1, "x");
 
 	std::multimap<std::string, automata::ClockConstraint> constraint2 = { {"x", automata::AtomicClockConstraintT<std::greater<Time>>(1)},
 																	{"x", automata::AtomicClockConstraintT<std::less<Time>>(2)}};
 	
-	std::map<std::string, zones::Zone_slice> zone2 = {{"x", zones::Zone_slice(constraint2, "x")}};
+	//zones::Zone_slice zone2 = zones::Zone_slice(constraint2, "x");
 
 	std::multimap<std::string, automata::ClockConstraint> constraint3 = { {"x", automata::AtomicClockConstraintT<std::equal_to<Time>>(1)},
 																	{"x", automata::AtomicClockConstraintT<std::less_equal<Time>>(2)}};
 
-	std::map<std::string, zones::Zone_slice> zone3 = {{"x", zones::Zone_slice(constraint3, "x")}};
+	//zones::Zone_slice zone3 = zones::Zone_slice(constraint3, "x");
 
 	std::multimap<std::string, automata::ClockConstraint> constraint4 = { {"x", automata::AtomicClockConstraintT<std::greater_equal<Time>>(1)}};
 
-	std::map<std::string, zones::Zone_slice> zone4 = {{"x", zones::Zone_slice(constraint4, "x")}};
+	zones::Zone_slice zone4 = zones::Zone_slice(constraint4, "x");
 
 	search::PlantZoneState<std::string> ta_state1 = {"l0", "x", constraint1};
 	CHECK(ta_state1.get_increment_valuation() == zone1);
