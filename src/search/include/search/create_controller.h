@@ -12,6 +12,7 @@
 #include "automata/automata.h"
 #include "automata/ta.h"
 #include "automata/ta_regions.h"
+#include "automata/automata_zones.h"
 #include "search/canonical_word.h"
 #include "search/synchronous_product.h"
 #include "search_tree.h"
@@ -31,15 +32,24 @@ get_constraints_from_time_successor(const search::CanonicalABWord<LocationT, Act
                                     automata::ta::ConstraintBoundType                  bound_type)
 {
 	using TARegionState = search::PlantRegionState<LocationT>;
+	using TAZoneState = search::PlantZoneState<LocationT>;
 	std::multimap<std::string, automata::ClockConstraint> res;
 	const auto                                            max_region_index = 2 * max_constant + 1;
 	for (const auto &symbol : word) {
-		for (const auto &region_state : symbol) {
-			assert(std::holds_alternative<TARegionState>(region_state));
-			const TARegionState state = std::get<TARegionState>(region_state);
-			for (const auto &constraint : automata::ta::get_clock_constraints_from_region_index(
-			       state.symbolic_valuation, max_region_index, bound_type)) {
-				res.insert({{state.clock, constraint}});
+		for (const auto &symbolic_state : symbol) {
+			assert(std::holds_alternative<TARegionState>(symbolic_state) || std::holds_alternative<TAZoneState>(symbolic_state));
+			if(std::holds_alternative<TARegionState>(symbolic_state)) {
+				const TARegionState state = std::get<TARegionState>(symbolic_state);
+				for (const auto &constraint : automata::ta::get_clock_constraints_from_region_index(
+				       state.symbolic_valuation, max_region_index, bound_type)) {
+					res.insert({{state.clock, constraint}});
+				}
+			} else { //TAZoneState
+				const TAZoneState state = std::get<TAZoneState>(symbolic_state);
+				for (const auto &constraint : zones::get_clock_constraints_from_zone(
+				       state.symbolic_valuation, max_region_index)) {
+					res.insert({{state.clock, constraint}});
+				}
 			}
 		}
 	}

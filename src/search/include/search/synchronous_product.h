@@ -135,7 +135,7 @@ increment_region_indexes(
 								//2. An interval starting/ending within an open interval, gets incremented so that it starts/ends at the next integer
 
 								//If we are at the max, don't care anymore
-								if(ata_configuration.symbolic_valuation.lower_bound_ >= (max_region_index / 2) )
+								if(ata_configuration.symbolic_valuation.lower_bound_ <= (max_region_index / 2) )
 								{
 									if(ata_configuration.symbolic_valuation.lower_isStrict_) {
 										ata_configuration.symbolic_valuation.lower_isStrict_ = false;
@@ -146,7 +146,7 @@ increment_region_indexes(
 								}
 
 								//If we are at the max, don't care anymore
-								if(ata_configuration.symbolic_valuation.upper_bound_ >= (max_region_index / 2) )
+								if(ata_configuration.symbolic_valuation.upper_bound_ <= (max_region_index / 2) )
 								{
 									if(ata_configuration.symbolic_valuation.upper_isStrict_) {
 										ata_configuration.symbolic_valuation.upper_isStrict_ = false;
@@ -202,38 +202,77 @@ get_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word, 
 		// All partitions are maxed, nothing to increment.
 		return word;
 	}
-	const bool has_even_region_index = get_region_index(*word.begin()->begin()) % 2 == 0;
-	// The first set needs to be incremented if its region indexes are even.
-	if (has_even_region_index) {
-		auto incremented = increment_region_indexes(*word.begin(), max_region_index);
-		std::set<ABRegionSymbol<Location, ConstraintSymbolType>> incremented_nonmaxed;
-		for (auto &configuration : incremented) {
-			if (get_region_index(configuration) == max_region_index) {
-				new_maxed_partition.insert(configuration);
-			} else {
-				incremented_nonmaxed.insert(configuration);
+
+	if(is_region_canonical_word(word)) {
+		const bool has_even_region_index = get_region_index(*word.begin()->begin()) % 2 == 0;
+		// The first set needs to be incremented if its region indexes are even.
+		if (has_even_region_index) {
+			auto incremented = increment_region_indexes(*word.begin(), max_region_index);
+			std::set<ABRegionSymbol<Location, ConstraintSymbolType>> incremented_nonmaxed;
+			for (auto &configuration : incremented) {
+				if (get_region_index(configuration) == max_region_index) {
+					new_maxed_partition.insert(configuration);
+				} else {
+					incremented_nonmaxed.insert(configuration);
+				}
 			}
-		}
-		if (!incremented_nonmaxed.empty()) {
-			res.push_back(std::move(incremented_nonmaxed));
-		}
-		std::reverse_copy(last_nonmaxed_partition, std::prev(word.rend()), std::back_inserter(res));
-	} else {
-		// Increment the last nonmaxed partition. If we have a new maxed configuration, put it into the
-		// maxed partition. Otherwise, keep it in place.
-		auto incremented = increment_region_indexes(*last_nonmaxed_partition, max_region_index);
-		std::set<ABRegionSymbol<Location, ConstraintSymbolType>> incremented_nonmaxed;
-		for (auto &configuration : incremented) {
-			if (get_region_index(configuration) == max_region_index) {
-				new_maxed_partition.insert(configuration);
-			} else {
-				incremented_nonmaxed.insert(configuration);
+			if (!incremented_nonmaxed.empty()) {
+				res.push_back(std::move(incremented_nonmaxed));
 			}
+			std::reverse_copy(last_nonmaxed_partition, std::prev(word.rend()), std::back_inserter(res));
+		} else {
+			// Increment the last nonmaxed partition. If we have a new maxed configuration, put it into the
+			// maxed partition. Otherwise, keep it in place.
+			auto incremented = increment_region_indexes(*last_nonmaxed_partition, max_region_index);
+			std::set<ABRegionSymbol<Location, ConstraintSymbolType>> incremented_nonmaxed;
+			for (auto &configuration : incremented) {
+				if (get_region_index(configuration) == max_region_index) {
+					new_maxed_partition.insert(configuration);
+				} else {
+					incremented_nonmaxed.insert(configuration);
+				}
+			}
+			if (!incremented_nonmaxed.empty()) {
+				res.push_back(std::move(incremented_nonmaxed));
+			}
+			std::reverse_copy(std::next(last_nonmaxed_partition), word.rend(), std::back_inserter(res));
 		}
-		if (!incremented_nonmaxed.empty()) {
-			res.push_back(std::move(incremented_nonmaxed));
+	} else { //Using zones
+		//if the first partition's zone starts at an integer, we can simple make it an open interval
+		//otherwise, the lastnonmaxed partition's upperbound gets incremented by going to the next open interval or next integer.
+
+		const bool first_partition_open = get_zone_slice(*word.begin()->begin()).lower_isStrict_;
+		if(first_partition_open) {
+			auto incremented = increment_region_indexes(*word.begin(), max_region_index);
+			std::set<ABRegionSymbol<Location, ConstraintSymbolType>> incremented_nonmaxed;
+			for (auto &configuration : incremented) {
+				if (get_region_index(configuration) == max_region_index) {
+					new_maxed_partition.insert(configuration);
+				} else {
+					incremented_nonmaxed.insert(configuration);
+				}
+			}
+			if (!incremented_nonmaxed.empty()) {
+				res.push_back(std::move(incremented_nonmaxed));
+			}
+			std::reverse_copy(last_nonmaxed_partition, std::prev(word.rend()), std::back_inserter(res));
+		} else {
+			// Increment the last nonmaxed partition. If we have a new maxed configuration, put it into the
+			// maxed partition. Otherwise, keep it in place.
+			auto incremented = increment_region_indexes(*last_nonmaxed_partition, max_region_index);
+			std::set<ABRegionSymbol<Location, ConstraintSymbolType>> incremented_nonmaxed;
+			for (auto &configuration : incremented) {
+				if (get_region_index(configuration) == max_region_index) {
+					new_maxed_partition.insert(configuration);
+				} else {
+					incremented_nonmaxed.insert(configuration);
+				}
+			}
+			if (!incremented_nonmaxed.empty()) {
+				res.push_back(std::move(incremented_nonmaxed));
+			}
+			std::reverse_copy(std::next(last_nonmaxed_partition), word.rend(), std::back_inserter(res));
 		}
-		std::reverse_copy(std::next(last_nonmaxed_partition), word.rend(), std::back_inserter(res));
 	}
 
 	// If the maxed partition is non-empty, add it to the resulting word.

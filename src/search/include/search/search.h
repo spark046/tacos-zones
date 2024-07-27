@@ -182,7 +182,6 @@ template <typename Location,
           typename Plant =
             automata::ta::TimedAutomaton<typename Location::UnderlyingType, ActionType>,
           bool use_set_semantics = false,
-		  bool use_zones = false,
 		  typename SymbolicRepresentation = RegionIndex>
 class TreeSearch
 {
@@ -209,17 +208,18 @@ public:
 	 * @param search_heuristic The heuristic to use during tree expansion
 	 */
 	TreeSearch(
-	  // const automata::ta::TimedAutomaton<Location, ActionType> *                                ta,
-	  const Plant                                                                      *ta,
-	  automata::ata::AlternatingTimedAutomaton<logic::MTLFormula<ConstraintSymbolType>,
-	                                           logic::AtomicProposition<ATAInputType>> *ata,
-	  std::set<ActionType>                   controller_actions,
-	  std::set<ActionType>                   environment_actions,
-	  RegionIndex                            K,
-	  bool                                   incremental_labeling = false,
-	  bool                                   terminate_early      = false,
-	  std::unique_ptr<Heuristic<long, Node>> search_heuristic =
-	    std::make_unique<BfsHeuristic<long, Node>>())
+		// const automata::ta::TimedAutomaton<Location, ActionType> *                                ta,
+		const Plant                                                                      *ta,
+		automata::ata::AlternatingTimedAutomaton<logic::MTLFormula<ConstraintSymbolType>,
+												 logic::AtomicProposition<ATAInputType>> *ata,
+		std::set<ActionType>                   controller_actions,
+		std::set<ActionType>                   environment_actions,
+		RegionIndex                            K,
+		bool                                   incremental_labeling = false,
+		bool                                   terminate_early      = false,
+		std::unique_ptr<Heuristic<long, Node>> search_heuristic =
+			std::make_unique<BfsHeuristic<long, Node>>(),
+		bool                                   use_zones = false)
 	: ta_(ta),
 	  ata_(ata),
 	  controller_actions_(controller_actions),
@@ -250,6 +250,24 @@ public:
 			}
 
 			tree_root_ = std::make_shared<Node>(initial_words);
+		} else if(use_zones) {
+			//TODO: Add zone support for location constraints and set semantics
+
+			std::multimap<std::string, automata::ClockConstraint> clock_constraints = ta->get_clock_constraints();
+			std::set<automata::ClockConstraint> ata_constraints = ata->get_clock_constraints();
+
+			for(auto iter1 = ata_constraints.begin(); iter1 != ata_constraints.end(); iter1++)
+			{
+				clock_constraints.insert( {"", *iter1} );
+			}
+
+			tree_root_ = std::make_shared<Node>(
+			  std::set<CanonicalABWord<typename Plant::Location, ConstraintSymbolType>>{
+			    get_canonical_word(ta->get_initial_configuration(),
+			                       ata->get_initial_configuration(),
+			                       K,
+								   true,
+								   clock_constraints)});
 		} else {
 			tree_root_ = std::make_shared<Node>(
 			  std::set<CanonicalABWord<typename Plant::Location, ConstraintSymbolType>>{

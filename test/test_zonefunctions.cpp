@@ -1,11 +1,35 @@
 #include "automata/automata.h"
 #include "automata/automata_zones.h"
 #include "automata/ta.h"
+#include "automata/ta_product.h"
+#include "automata/ta_regions.h"
 #include "utilities/types.h"
 #include "automata/ta_regions.h"
 
 #include "search/search.h"
 
+
+//TODO: Figure out what is actually necessary, currently just copied from test_railroad.cpp
+#include "automata/automata.h"
+#include "automata/ta.h"
+#include "automata/ta_product.h"
+#include "automata/ta_regions.h"
+#include "heuristics_generator.h"
+#include "mtl/MTLFormula.h"
+#include "mtl_ata_translation/translator.h"
+#include "railroad.h"
+#include "search/canonical_word.h"
+#include "search/create_controller.h"
+#include "search/heuristics.h"
+#include "search/search.h"
+#include "search/search_tree.h"
+#include "search/synchronous_product.h"
+#include "search/ta_adapter.h"
+#include "visualization/ta_to_graphviz.h"
+#include "visualization/tree_to_graphviz.h"
+
+#include <catch2/benchmark/catch_benchmark.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <map>
 #include <string>
@@ -30,7 +54,11 @@ using ConjunctionFormula        = automata::ata::ConjunctionFormula<std::string>
 using DisjunctionFormula        = automata::ata::DisjunctionFormula<std::string>;
 using ResetClockFormula         = automata::ata::ResetClockFormula<std::string>;
 
-TEST_CASE("Getting fulfilled Clock Constraints", "[zones]")
+using AP                        = logic::AtomicProposition<std::string>;
+using TreeSearch =
+  search::TreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
+
+TEST_CASE("Getting fulfilled Clock Constraints of a ta", "[zones]")
 {
 	automata::ClockConstraint c1 = automata::AtomicClockConstraintT<std::less<Time>>(1);
 	automata::ClockConstraint c2 = automata::AtomicClockConstraintT<std::greater<Time>>(1);
@@ -44,9 +72,9 @@ TEST_CASE("Getting fulfilled Clock Constraints", "[zones]")
 	std::multimap<std::string, automata::ClockConstraint> set1 = {{"x", c1}, {"x", c2}, {"x", c3}};
 	std::multimap<std::string, automata::ClockConstraint> set2 = {{"x", c1}};
 
-	CHECK(zones::get_clock_constraints_of_ta<std::string, std::string>(ta) == set1);
+	CHECK(ta.get_clock_constraints() == set1);
 
-	CHECK(zones::get_fulfilled_clock_constraints(zones::get_clock_constraints_of_ta<std::string, std::string>(ta), "x", 0) == set2);
+	CHECK(zones::get_fulfilled_clock_constraints(ta.get_clock_constraints(), "x", 0) == set2);
 }
 
 TEST_CASE("Delaying zones of zone states", "[zones]")
@@ -125,6 +153,43 @@ TEST_CASE("Getting Clock Constraints from ATA", "[zones]")
 	std::set<automata::ClockConstraint> all_clock_constraints = ata.get_clock_constraints();
 
 	CHECK(all_clock_constraints == std::set<automata::ClockConstraint>{constraint1, constraint2, constraint3, constraint4, constraint5});
+}
+
+TEST_CASE("Railroad example using zones", "[zones]")
+{
+	const auto &[plant, spec, controller_actions, environment_actions] = create_crossing_problem({2});
+	//const auto   num_crossings                                         = 1;
+	std::set<AP> actions;
+	std::set_union(begin(controller_actions),
+				   end(controller_actions),
+				   begin(environment_actions),
+				   end(environment_actions),
+				   inserter(actions, end(actions)));
+	CAPTURE(spec);
+	auto ata = mtl_ata_translation::translate(spec, actions);
+	CAPTURE(plant);
+	CAPTURE(ata);
+	const unsigned int K = std::max(plant.get_largest_constant(), spec.get_largest_constant());
+	TreeSearch search{&plant,
+					  &ata,
+					  controller_actions,
+					  environment_actions,
+					  K,
+					  true,
+					  true,
+					  generate_heuristic<TreeSearch::Node>(),
+					  true};
+	search.build_tree(true);
+	CHECK(search.get_root()->label == search::NodeLabel::TOP);
+
+	const int num_crossings = 2;
+
+	visualization::search_tree_to_graphviz(*search.get_root(), true)
+	  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
+	visualization::ta_to_graphviz(controller_synthesis::create_controller(
+	                                search.get_root(), controller_actions, environment_actions, 2),
+	                              false)
+	  .render_to_file(fmt::format("railroad{}_controller.pdf", num_crossings));
 }
 
 } // namespace

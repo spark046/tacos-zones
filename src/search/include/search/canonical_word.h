@@ -51,9 +51,9 @@ get_time(const ABSymbol<Location, ConstraintSymbolType> &w)
 }
 
 /** Get the region index for a regionalized ABRegionSymbol, which is either a
- * TARegionState or an ATARegionState.
+ * TARegionState or an ATARegionState. It can also be a ZoneState, in which case the largest region_index of the zone is returned.
  * @param w The symbol to read the time from
- * @return The region index in the given state.
+ * @return The region index in the given state. For zones, this is largest region index that is in the zone.
  */
 template <typename Location, typename ConstraintSymbolType>
 RegionIndex
@@ -63,8 +63,56 @@ get_region_index(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
 		return std::get<PlantRegionState<Location>>(w).symbolic_valuation;
 	} else if(std::holds_alternative<ATARegionState<ConstraintSymbolType>>(w)) {
 		return std::get<ATARegionState<ConstraintSymbolType>>(w).symbolic_valuation;
-	} else { //TODO: Do some fallback in case this function was called for zones.
-		return -1;
+	} else if(std::holds_alternative<PlantZoneState<Location>>(w)) {
+		zones::Zone_slice zone = std::get<PlantZoneState<Location>>(w).symbolic_valuation;
+
+		if(zone.upper_isStrict_) {
+			return (zone.upper_bound_ * 2) - 1;
+		} else {
+			return zone.upper_bound_ * 2;
+		}
+	} else { //ATAZoneState
+		zones::Zone_slice zone = std::get<ATAZoneState<ConstraintSymbolType>>(w).symbolic_valuation;
+
+		if(zone.upper_isStrict_) {
+			return (zone.upper_bound_ * 2) - 1;
+		} else {
+			return zone.upper_bound_ * 2;
+		}
+	}
+}
+
+/** Get the Zone for an ABRegionSymbol using zones.
+ * This ABRegionSymbol should be either a PlantZoneState or an ATAZoneState.
+ * If it is one of the regionalized states, the interval that represents the region is returned as a fallback.
+ * 
+ * @param w The ABRegionSymbol
+ * @return The zone slice of the symbol. If the symbol was regionalized, the region is converted to an interval and returned
+ */
+template <typename Location, typename ConstraintSymbolType>
+zones::Zone_slice
+get_zone_slice(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
+{
+	if (std::holds_alternative<PlantRegionState<Location>>(w)) {
+		RegionIndex i = std::get<PlantRegionState<Location>>(w).symbolic_valuation;
+
+		if(i % 2 == 0) {
+			return zones::Zone_slice{i/2, i/2, false, false};
+		} else {
+			return zones::Zone_slice{i/2, i/2 + 1, true, true};
+		}
+	} else if(std::holds_alternative<ATARegionState<ConstraintSymbolType>>(w)) {
+		RegionIndex i = std::get<ATARegionState<ConstraintSymbolType>>(w).symbolic_valuation;
+
+		if(i % 2 == 0) {
+			return zones::Zone_slice{i/2, i/2, false, false};
+		} else {
+			return zones::Zone_slice{i/2, i/2 + 1, true, true};
+		}
+	} else if(std::holds_alternative<PlantZoneState<Location>>(w)) {
+		return std::get<PlantZoneState<Location>>(w).symbolic_valuation;
+	} else { //ATAZoneState
+		return std::get<ATAZoneState<ConstraintSymbolType>>(w).symbolic_valuation;
 	}
 }
 
