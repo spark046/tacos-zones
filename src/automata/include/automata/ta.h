@@ -363,6 +363,24 @@ public:
 		return clocks_;
 	}
 
+	/**
+	 * Get all the clock constraints of all the transitions
+	 * 
+	 * @return A multimap with entries (clock name, clock constraint)
+	 */
+	const std::multimap<std::string, ClockConstraint>
+	get_clock_constraints() const
+	{
+		std::multimap<std::string, ClockConstraint> ret;
+
+		for(auto iter1 = transitions_.begin(); iter1 != transitions_.end(); iter1++)
+		{
+			ret.insert(iter1->second.get_guards().begin(), iter1->second.get_guards().end());
+		}
+
+		return ret;
+	}
+
 	/** Add a location to the TA.
 	 * @param location the location to add
 	 * @return true if a new location was added

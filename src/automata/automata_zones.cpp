@@ -18,6 +18,39 @@ namespace tacos::zones {
 		return ret;
 	}
 
+	std::vector<automata::ClockConstraint> 
+	get_clock_constraints_from_zone(const Zone_slice &zone, RegionIndex max_region_index)
+	{
+		Endpoint max_constant;
+		if(max_region_index % 2 == 0) {
+			max_constant = max_region_index / 2;
+		} else {
+			max_constant = (max_region_index + 1) / 2;
+		}
+
+		if(zone.lower_bound_ == zone.upper_bound_) {
+			return {automata::AtomicClockConstraintT<std::equal_to<Time>>(zone.lower_bound_)};
+		}
+
+		std::vector<automata::ClockConstraint> ret;
+		
+		if(zone.lower_isStrict_) {
+			ret.push_back(automata::AtomicClockConstraintT<std::greater<Time>>(zone.lower_bound_));
+		} else {
+			ret.push_back(automata::AtomicClockConstraintT<std::greater_equal<Time>>(zone.lower_bound_));
+		}
+
+		if(zone.upper_bound_ <= max_constant) {
+			if(zone.upper_isStrict_) {
+				ret.push_back(automata::AtomicClockConstraintT<std::less<Time>>(zone.upper_bound_));
+			} else {
+				ret.push_back(automata::AtomicClockConstraintT<std::less_equal<Time>>(zone.upper_bound_));
+			}
+		}
+
+		return ret;
+	}
+
 	std::ostream &
 	operator<<(std::ostream &os, const zones::Zone_slice &zone_slice)
 	{
