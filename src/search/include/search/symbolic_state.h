@@ -176,9 +176,13 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 	}
 
 	/** Overloaded Constructor allowing the use of a set of ClockConstraints to initialize a ZoneState */
-	ZoneState(LocationType location_p, std::string clock_p, std::multimap<std::string, automata::ClockConstraint> clock_constraint) :
-	Base::SymbolicState(location_p, clock_p, [&clock_constraint, &clock_p](){
-		ZoneSlice ret = ZoneSlice(0, std::numeric_limits<Endpoint>::max(), false, false);
+	ZoneState(LocationType location_p, std::string clock_p, std::multimap<std::string, automata::ClockConstraint> clock_constraint, Endpoint max_constant = 0) :
+	Base::SymbolicState(location_p, clock_p, [&clock_constraint, &clock_p, &max_constant](){
+		ZoneSlice ret = ZoneSlice(0, std::numeric_limits<Endpoint>::max(), false, false, max_constant);
+
+		if(clock_constraint.empty()) {
+			return ret;
+		}
 
 		for(auto iter1 = clock_constraint.begin(); iter1 != clock_constraint.end(); iter1++)
 		{
@@ -207,13 +211,18 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 	 */
 	ZoneSlice get_increment_valuation() const
 	{
-		Endpoint max_valuation = std::numeric_limits<Endpoint>::max(); //TODO: Make this a parameter
+		Endpoint max_valuation;
+		if(Base::symbolic_valuation.max_constant_ > 0) {
+			max_valuation = Base::symbolic_valuation.max_constant_;
+		} else {
+			max_valuation = std::numeric_limits<Endpoint>::max();
+		}
 
 		if(Base::symbolic_valuation.upper_bound_ >= max_valuation)
 		{
 			return Base::symbolic_valuation;
 		} else {
-			return zones::Zone_slice(Base::symbolic_valuation.lower_bound_, max_valuation, Base::symbolic_valuation.lower_isStrict_, false);
+			return zones::Zone_slice(Base::symbolic_valuation.lower_bound_, max_valuation, Base::symbolic_valuation.lower_isOpen_, false);
 		}
 	}
 
@@ -228,8 +237,8 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 	friend bool
 	operator<(const ZoneState<LocationType> &s1, const ZoneState<LocationType> &s2)
 	{
-		return std::tie(s1.location, s1.clock)
-		       < std::tie(s2.location, s2.clock);
+		return std::tie(s1.location, s1.clock, s1.symbolic_valuation)
+		       < std::tie(s2.location, s2.clock, s2.symbolic_valuation);
 	}
 	
 	/** Check two zone states for equality.
@@ -267,8 +276,8 @@ struct PlantZoneState : ZoneState<LocationT>
 
 	}
 
-	PlantZoneState(LocationT location, std::string clock, ConstraintSet constraints) :
-	ZoneState<LocationT>::ZoneState(location, clock, constraints)
+	PlantZoneState(LocationT location, std::string clock, ConstraintSet constraints, Endpoint max_constant = 0) :
+	ZoneState<LocationT>::ZoneState(location, clock, constraints, max_constant)
 	{
 
 	}
@@ -284,14 +293,14 @@ struct ATAZoneState : ZoneState<logic::MTLFormula<ConstraintSymbolType>>
 	using ZoneSlice = zones::Zone_slice;
 	using ConstraintSet = std::multimap<std::string, automata::ClockConstraint>;
 
-	ATAZoneState(ConstraintSymbolType location, ZoneSlice zone_slice) :
-	ZoneState<ConstraintSymbolType>::ZoneState(location, "", zone_slice)
+	ATAZoneState(logic::MTLFormula<ConstraintSymbolType> formula, ZoneSlice zone_slice) :
+	ZoneState<logic::MTLFormula<ConstraintSymbolType>>::ZoneState(formula, "", zone_slice)
 	{
 
 	}
 
-	ATAZoneState(logic::MTLFormula<ConstraintSymbolType> formula, ConstraintSet constraints) :
-	ZoneState<logic::MTLFormula<ConstraintSymbolType>>::ZoneState(formula, "", constraints)
+	ATAZoneState(logic::MTLFormula<ConstraintSymbolType> formula, ConstraintSet constraints, Endpoint max_constant = 0) :
+	ZoneState<logic::MTLFormula<ConstraintSymbolType>>::ZoneState(formula, "", constraints, max_constant)
 	{
 
 	}

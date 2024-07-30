@@ -5,6 +5,10 @@ namespace tacos::zones {
 
 	std::multimap<std::string, automata::ClockConstraint>
 	get_fulfilled_clock_constraints(const std::multimap<std::string, automata::ClockConstraint> allConstraints, std::string clock, ClockValuation val) {
+		if(allConstraints.empty()) {
+			return {};
+		}
+
 		std::multimap<std::string, automata::ClockConstraint> ret = {};
 
 		for(auto it1 = allConstraints.begin(); it1 != allConstraints.end(); it1++) {
@@ -34,14 +38,14 @@ namespace tacos::zones {
 
 		std::vector<automata::ClockConstraint> ret;
 		
-		if(zone.lower_isStrict_) {
+		if(zone.lower_isOpen_) {
 			ret.push_back(automata::AtomicClockConstraintT<std::greater<Time>>(zone.lower_bound_));
 		} else {
 			ret.push_back(automata::AtomicClockConstraintT<std::greater_equal<Time>>(zone.lower_bound_));
 		}
 
 		if(zone.upper_bound_ <= max_constant) {
-			if(zone.upper_isStrict_) {
+			if(zone.upper_isOpen_) {
 				ret.push_back(automata::AtomicClockConstraintT<std::less<Time>>(zone.upper_bound_));
 			} else {
 				ret.push_back(automata::AtomicClockConstraintT<std::less_equal<Time>>(zone.upper_bound_));
@@ -56,16 +60,19 @@ namespace tacos::zones {
 	{
 		std::string leftBracket = "[";
 		std::string rightBracket = "]";
-		if(zone_slice.lower_isStrict_)
+		if(zone_slice.lower_isOpen_)
 		{
 			leftBracket = "(";
 		}
-		if(zone_slice.upper_isStrict_)
+		if(zone_slice.upper_isOpen_)
 		{
 			rightBracket = ")";
 		}
-
-		os << leftBracket << zone_slice.lower_bound_ << "; " << zone_slice.upper_bound_ << rightBracket;
+		if(zone_slice.upper_bound_ == zone_slice.max_constant_ && !zone_slice.upper_isOpen_) {
+			os << leftBracket << zone_slice.lower_bound_ << "; " << u8"∞/" << zone_slice.upper_bound_ << ")";
+		} else {
+			os << leftBracket << zone_slice.lower_bound_ << "; " << zone_slice.upper_bound_ << rightBracket;
+		}
 		return os;
 	}
 

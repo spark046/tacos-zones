@@ -51,9 +51,12 @@ get_time(const ABSymbol<Location, ConstraintSymbolType> &w)
 }
 
 /** Get the region index for a regionalized ABRegionSymbol, which is either a
- * TARegionState or an ATARegionState. It can also be a ZoneState, in which case the largest region_index of the zone is returned.
+ * TARegionState or an ATARegionState. It can also be a ZoneState, in which case the smallest region_index of the zone is returned.
+ * 
+ * The smallest RegionIndex is returned for zones, since get_region_index is also used for checking whether a configuration is maximized.
+ * TODO: Let this function only be used for Regions
  * @param w The symbol to read the time from
- * @return The region index in the given state. For zones, this is largest region index that is in the zone.
+ * @return The region index in the given state. For zones, this is smallest region index that is in the zone.
  */
 template <typename Location, typename ConstraintSymbolType>
 RegionIndex
@@ -66,18 +69,18 @@ get_region_index(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
 	} else if(std::holds_alternative<PlantZoneState<Location>>(w)) {
 		zones::Zone_slice zone = std::get<PlantZoneState<Location>>(w).symbolic_valuation;
 
-		if(zone.upper_isStrict_) {
-			return (zone.upper_bound_ * 2) - 1;
+		if(zone.lower_isOpen_) {
+			return (zone.lower_bound_ * 2) - 1;
 		} else {
-			return zone.upper_bound_ * 2;
+			return zone.lower_bound_ * 2;
 		}
 	} else { //ATAZoneState
 		zones::Zone_slice zone = std::get<ATAZoneState<ConstraintSymbolType>>(w).symbolic_valuation;
 
-		if(zone.upper_isStrict_) {
-			return (zone.upper_bound_ * 2) - 1;
+		if(zone.lower_isOpen_) {
+			return (zone.lower_bound_ * 2) - 1;
 		} else {
-			return zone.upper_bound_ * 2;
+			return zone.lower_bound_ * 2;
 		}
 	}
 }
@@ -91,23 +94,23 @@ get_region_index(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
  */
 template <typename Location, typename ConstraintSymbolType>
 zones::Zone_slice
-get_zone_slice(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
+get_zone_slice(const ABRegionSymbol<Location, ConstraintSymbolType> &w, RegionIndex max_region_index = 0)
 {
 	if (std::holds_alternative<PlantRegionState<Location>>(w)) {
 		RegionIndex i = std::get<PlantRegionState<Location>>(w).symbolic_valuation;
 
 		if(i % 2 == 0) {
-			return zones::Zone_slice{i/2, i/2, false, false};
+			return zones::Zone_slice{i/2, i/2, false, false, max_region_index};
 		} else {
-			return zones::Zone_slice{i/2, i/2 + 1, true, true};
+			return zones::Zone_slice{i/2, i/2 + 1, true, true, max_region_index};
 		}
 	} else if(std::holds_alternative<ATARegionState<ConstraintSymbolType>>(w)) {
 		RegionIndex i = std::get<ATARegionState<ConstraintSymbolType>>(w).symbolic_valuation;
 
 		if(i % 2 == 0) {
-			return zones::Zone_slice{i/2, i/2, false, false};
+			return zones::Zone_slice{i/2, i/2, false, false, max_region_index};
 		} else {
-			return zones::Zone_slice{i/2, i/2 + 1, true, true};
+			return zones::Zone_slice{i/2, i/2 + 1, true, true, max_region_index};
 		}
 	} else if(std::holds_alternative<PlantZoneState<Location>>(w)) {
 		return std::get<PlantZoneState<Location>>(w).symbolic_valuation;
@@ -167,56 +170,6 @@ bool
 is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &word,
                         RegionIndex                                            max_region = 0)
 {
-	// TODO all ta_symbols should agree on the same location
-	// TODO clocks must have unique values (i.e., must not occur multiple times)
-	if (word.empty()) {
-		throw InvalidCanonicalWordException(word, "word is empty");
-	}
-	// No configuration should be empty
-	if (std::any_of(word.begin(), word.end(), [](const auto &configurations) {
-		    return configurations.empty();
-	    })) {
-		throw InvalidCanonicalWordException(word, "word contains an empty configuration");
-	}
-	// Each partition either contains only even or only odd region indexes. This is because the word
-	// is partitioned by the fractional part and the region index can only be even if the fractional
-	// part is 0. If that is the case, there cannot be any configuration with an odd region index in
-	// the same partition, as that configuration's fractional part would be > 0.
-	std::for_each(word.begin(), word.end(), [&word](const auto &configurations) {
-		if (std::any_of(configurations.begin(),
-		                configurations.end(),
-		                [](const auto &w) { return get_region_index(w) % 2 == 0; })
-		    && std::any_of(configurations.begin(), configurations.end(), [](const auto &w) {
-			       return get_region_index(w) % 2 == 1;
-		       })) {
-			throw InvalidCanonicalWordException(word, "both odd and even region indexes");
-		}
-	});
-	// There must be no configuration with a region larger than the max region index.
-	if (max_region > 0) {
-		if (std::any_of(word.begin(), word.end(), [max_region](const auto &configurations) {
-			    return std::any_of(configurations.begin(),
-			                       configurations.end(),
-			                       [max_region](const auto &w) {
-				                       return get_region_index(w) > max_region;
-			                       });
-		    })) {
-			throw InvalidCanonicalWordException(
-			  word, "word contains configuration with a region larger than the max region");
-		};
-	}
-	// There must be at most one partition with fractional part 0.
-	// The only partition that is allowed to have fracitonal part 0 is the 0th
-	// partition.
-	std::for_each(std::next(word.begin()), word.end(), [&word](const auto &configurations) {
-		std::for_each(configurations.begin(), configurations.end(), [&word](const auto &w) {
-			if (get_region_index(w) % 2 == 0) {
-				throw InvalidCanonicalWordException(word,
-				                                    "fractional part 0 in wrong element of partition");
-			}
-		});
-	});
-
 	// There cannot be both regionalized ABSymbols and ABSymbols using zones.
 	//Check whether the "first" element is regionalized or not, we then check whether the rest matches
 	bool regionalized = (std::holds_alternative<PlantRegionState<Location>>(*word[0].begin()) || std::holds_alternative<ATARegionState<ConstraintSymbolType>>(*word[0].begin()) );
@@ -239,6 +192,92 @@ is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &w
 		}
 
 	});
+
+	// TODO all ta_symbols should agree on the same location
+	// TODO clocks must have unique values (i.e., must not occur multiple times)
+	if (word.empty()) {
+		throw InvalidCanonicalWordException(word, "word is empty");
+	}
+	// No configuration should be empty
+	if (std::any_of(word.begin(), word.end(), [](const auto &configurations) {
+		    return configurations.empty();
+	    })) {
+		throw InvalidCanonicalWordException(word, "word contains an empty configuration");
+	}
+
+	if(regionalized)
+	{
+		// There must be no configuration with a region larger than the max region index.
+		if (max_region > 0) {
+			if (std::any_of(word.begin(), word.end(), [max_region](const auto &configurations) {
+				    return std::any_of(configurations.begin(),
+				                       configurations.end(),
+				                       [max_region](const auto &w) {
+					                       return get_region_index(w) > max_region;
+				                       });
+			    })) {
+				throw InvalidCanonicalWordException(
+				  word, "word contains configuration with a region larger than the max region");
+			};
+		}
+
+		// Each partition either contains only even or only odd region indexes. This is because the word
+		// is partitioned by the fractional part and the region index can only be even if the fractional
+		// part is 0. If that is the case, there cannot be any configuration with an odd region index in
+		// the same partition, as that configuration's fractional part would be > 0.
+		std::for_each(word.begin(), word.end(), [&word](const auto &configurations) {
+			if (std::any_of(configurations.begin(),
+			                configurations.end(),
+			                [](const auto &w) { return get_region_index(w) % 2 == 0; })
+			    && std::any_of(configurations.begin(), configurations.end(), [](const auto &w) {
+				       return get_region_index(w) % 2 == 1;
+			       })) {
+				throw InvalidCanonicalWordException(word, "both odd and even region indexes");
+			}
+		});
+
+		// There must be at most one partition with fractional part 0.
+		// The only partition that is allowed to have fracitonal part 0 is the 0th
+		// partition.
+		std::for_each(std::next(word.begin()), word.end(), [&word](const auto &configurations) {
+			std::for_each(configurations.begin(), configurations.end(), [&word](const auto &w) {
+				if (get_region_index(w) % 2 == 0) {
+					throw InvalidCanonicalWordException(word,
+					                                    "fractional part 0 in wrong element of partition");
+				}
+			});
+		});
+	} else {
+		//There must be no invalid zone or zone exceeding the max region index.
+		//Max Constant
+		RegionIndex K;
+		if(max_region % 2 == 0) {
+			K = max_region / 2;
+		} else {
+			K = (max_region + 1) / 2;
+		}
+
+		std::for_each(word.begin(), word.end(), [&word](const auto &configurations) {
+			if (std::any_of(configurations.begin(),
+			                configurations.end(),
+			                [](const auto &w) { return !zones::is_valid_zone(get_zone_slice(w)); })
+				) {
+				throw InvalidCanonicalWordException(word, "word contains configuration with an invalid zone");
+			}
+		});
+
+		std::for_each(word.begin(), word.end(), [&word, K](const auto &configurations) {
+			if (std::any_of(configurations.begin(),
+			                configurations.end(),
+			                [K](const auto &w) { return(get_zone_slice(w).lower_bound_ > K ||
+														get_zone_slice(w).upper_bound_ > K ||
+														get_zone_slice(w).max_constant_ > K) &&
+														K != 0; })
+				) {
+				throw InvalidCanonicalWordException(word, "word contains configuration with a zone that has bounds exceeding the max region");
+			}
+		});
+	}
 
 	return true;
 }
@@ -351,7 +390,8 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 
 						return PlantZoneState<Location>(s.location,
 														s.clock,
-														zone);
+														zone,
+														K);
 					} else {
 						const ATAState<ConstraintSymbolType> &s = std::get<ATAState<ConstraintSymbolType>>(w);
 
@@ -359,7 +399,8 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 							zones::get_fulfilled_clock_constraints(clock_constraints, "", s.clock_valuation);
 
 						return ATAZoneState<ConstraintSymbolType>(s.location,
-																  zone);
+																  zone,
+																  K);
 					}
 				});
 			abs.push_back(abs_i);

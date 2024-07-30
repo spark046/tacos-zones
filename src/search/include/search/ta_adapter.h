@@ -63,7 +63,8 @@ public:
 	  const std::pair<typename automata::ta::TimedAutomaton<LocationT, ActionType>::Configuration,
 	                  ATAConfiguration<ConstraintSymbolType>> &ab_configuration,
 	  const RegionIndex,
-	  const RegionIndex K)
+	  const RegionIndex K,
+	  const bool use_zones = false)
 	{
 		static_assert(use_location_constraints || std::is_same_v<ActionType, ConstraintSymbolType>);
 		static_assert(
@@ -102,8 +103,19 @@ public:
 					             ab_configuration.first,
 					             ab_configuration.second,
 					             ata_successor);
+
+					std::multimap<std::string, automata::ClockConstraint> constraints = {};
+					if(use_zones) {
+						constraints = ta.get_clock_constraints();
+						std::set<automata::ClockConstraint> ata_constraints = ata.get_clock_constraints();
+
+						for(auto iter1 = ata_constraints.begin(); iter1 != ata_constraints.end(); iter1++) {
+							constraints.insert( {"", *iter1} );
+						}
+					}
+
 					[[maybe_unused]] auto successor = successors.insert(
-					  std::make_pair(symbol, get_canonical_word(ta_successor, ata_successor, K)));
+					  std::make_pair(symbol, get_canonical_word(ta_successor, ata_successor, K, use_zones, constraints)));
 					SPDLOG_TRACE("({}, {}): Getting {} with symbol {}",
 					             ab_configuration.first,
 					             ab_configuration.second,

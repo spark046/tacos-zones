@@ -58,6 +58,11 @@ using AP                        = logic::AtomicProposition<std::string>;
 using TreeSearch =
   search::TreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
 
+using PlantZoneState = search::PlantZoneState<Location>;
+using ATAZoneState = search::ATAZoneState<std::string>;
+using CanonicalABWord = search::CanonicalABWord<automata::ta::Location<std::string>, std::string>;
+using ATAConfiguration = automata::ata::Configuration<logic::MTLFormula<std::string>>;
+
 TEST_CASE("Getting fulfilled Clock Constraints of a ta", "[zones]")
 {
 	automata::ClockConstraint c1 = automata::AtomicClockConstraintT<std::less<Time>>(1);
@@ -155,6 +160,235 @@ TEST_CASE("Getting Clock Constraints from ATA", "[zones]")
 	CHECK(all_clock_constraints == std::set<automata::ClockConstraint>{constraint1, constraint2, constraint3, constraint4, constraint5});
 }
 
+TEST_CASE("Canonical Word using zones", "[zones]")
+{
+	TimedAutomaton ta{{Location{"s0"}, Location{"s1"}, Location{"s2"}},
+		  {"a", "b", "c"},
+		  Location{"s0"},
+		  {Location{"s0"}, Location{"s1"}, Location{"s2"}},
+		  {"x"},
+		  {TATransition(Location{"s0"},
+						"a",
+						Location{"s0"},
+						{{"x", automata::AtomicClockConstraintT<std::greater<Time>>(1)}},
+						{"x"}),
+		   TATransition(Location{"s0"},
+						"b",
+						Location{"s1"},
+						{{"x", automata::AtomicClockConstraintT<std::less<Time>>(1)}}),
+		   TATransition(Location{"s0"}, "c", Location{"s2"}),
+		   TATransition(Location{"s2"}, "b", Location{"s1"})}};
+
+
+	logic::MTLFormula<std::string> a{AP("a")};
+	logic::MTLFormula<std::string> b{AP("b")};
+	logic::MTLFormula f   = a.until(b);
+	auto              ata = mtl_ata_translation::translate(f);
+
+	std::multimap<std::string, automata::ClockConstraint> clock_constraints = {
+																				{"x", automata::AtomicClockConstraintT<std::greater<Time>>(1)},
+																				{"x", automata::AtomicClockConstraintT<std::less<Time>>(1)}
+																			  };
+
+	auto initial_word = search::get_canonical_word(Configuration{Location{"s0"}, {{"x", 0}}},
+										   ata.get_initial_configuration(),
+										   2,
+										   true,
+										   clock_constraints);
+
+
+	zones::Zone_slice zone_everything = zones::Zone_slice{0, 2, false, false, 2};
+	zones::Zone_slice zone_less1 = zones::Zone_slice{0, 1, false, true, 2};
+	//zones::Zone_slice zone_greater1 = zones::Zone_slice{1, 2, true, false, 2};
+
+	CHECK(!search::is_region_canonical_word(initial_word));
+
+	CHECK(initial_word
+			  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "x", zone_less1},
+								   ATAZoneState{logic::MTLFormula{AP{"l0"}}, zone_everything}}}));
+
+	CHECK(search::get_next_canonical_words<TimedAutomaton, std::string, std::string, false>()(
+				ta, ata, {ta.get_initial_configuration(), ata.get_initial_configuration()}, 0, 2, true)
+			  == std::multimap<std::string, CanonicalABWord>{
+				{"b", CanonicalABWord{{PlantZoneState{Location{"s1"}, "x", zone_less1}, ATAZoneState{f, zone_everything}}}},
+				{"c",
+				 CanonicalABWord{{PlantZoneState{Location{"s2"}, "x", zone_less1},
+								  ATAZoneState{mtl_ata_translation::get_sink<std::string>(), zone_everything}}}}});
+	
+	CHECK(search::get_next_canonical_words<TimedAutomaton, std::string, std::string, false>()(
+				ta, ata, {ta.get_initial_configuration(), ATAConfiguration{{f, 0}}}, 0, 2, true)
+			  == std::multimap<std::string, CanonicalABWord>{
+				{"b", CanonicalABWord{{PlantZoneState{Location{"s1"}, "x", zone_less1}}}},
+				{"c",
+				 CanonicalABWord{{PlantZoneState{Location{"s2"}, "x", zone_less1},
+								  ATAZoneState{mtl_ata_translation::get_sink<std::string>(), zone_everything}}}}});
+}
+
+TEST_CASE("monotone_domination_order for zones", "[zones]")
+{
+	zones::Zone_slice zone0 = zones::Zone_slice{0, std::numeric_limits<Endpoint>::max(), false, false};
+	zones::Zone_slice zone1 = zones::Zone_slice{1, std::numeric_limits<Endpoint>::max(), false, false};
+
+	CHECK(search::is_monotonically_dominated(
+	  CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone0}}}),
+	  CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone0}}})));
+	CHECK(!search::is_monotonically_dominated(
+	  CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone0}}}),
+	  CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone1}}})));
+	CHECK(!search::is_monotonically_dominated(
+	  CanonicalABWord(
+		{{PlantZoneState{Location{"s0"}, "c0", zone0}, ATAZoneState{logic::MTLFormula{AP{"a"}}, zone0}}}),
+	  CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone0}}})));
+	CHECK(search::is_monotonically_dominated(
+	  CanonicalABWord(
+		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone0}}}),
+	  CanonicalABWord(
+		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone0}}})));
+	CHECK(!search::is_monotonically_dominated(
+	  CanonicalABWord(
+		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone1}},
+		 {ATAZoneState{logic::MTLFormula{AP{"a"}}, zone0}}}),
+	  CanonicalABWord(
+		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone1}}})));
+	CHECK(search::is_monotonically_dominated(
+	  CanonicalABWord(
+		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone1}}}),
+	  CanonicalABWord(
+		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone1}},
+		 {ATAZoneState{logic::MTLFormula{AP{"a"}}, zone0}}})));
+	CHECK(search::is_monotonically_dominated(
+	  CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone0}}}),
+	  CanonicalABWord(
+		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone1}},
+		 {ATAZoneState{logic::MTLFormula{AP{"a"}}, zone0}}})));
+}
+
+TEST_CASE("Get time successors of CanonicalABWords using zones", "[zones]")
+{
+	zones::Zone_slice zone_all = zones::Zone_slice{0, 3, false, false, 3};
+	zones::Zone_slice zone_gtr_0 = zones::Zone_slice{0, 3, true, false, 3};
+	zones::Zone_slice zone_geq_1 = zones::Zone_slice{1, 3, false, false, 3};
+	zones::Zone_slice zone_gtr_1 = zones::Zone_slice{1, 3, true, false, 3};
+
+	// TODO rewrite test cases to only contain valid words
+	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone_all}},
+											  {PlantZoneState{Location{"s0"}, "c1", zone_gtr_0}}}),
+							 3)
+		  == CanonicalABWord(
+			{{PlantZoneState{Location{"s0"}, "c0", zone_gtr_0}}, {PlantZoneState{Location{"s0"}, "c1", zone_gtr_0}}}));
+	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone_all}}}), 3)
+		  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone_gtr_0}}}));
+	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone_all}},
+											  {PlantZoneState{Location{"s0"}, "c1", zone_gtr_0}},
+											  {PlantZoneState{Location{"s0"}, "c2", zone_geq_1}}}),
+							 3)
+		  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone_gtr_0}},
+							  {PlantZoneState{Location{"s0"}, "c1", zone_gtr_0}},
+							  {PlantZoneState{Location{"s0"}, "c2", zone_geq_1}}}));
+	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone_gtr_0}},
+											  {PlantZoneState{Location{"s0"}, "c1", zone_geq_1}}}),
+							 3)
+		  == CanonicalABWord(
+			{{PlantZoneState{Location{"s0"}, "c1", zone_gtr_1}}, {PlantZoneState{Location{"s0"}, "c0", zone_gtr_0}}}));
+	
+	//TODO: Refactor all tests
+	#if false
+	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 1}},
+											  {PlantZoneState{Location{"s0"}, "c1", 1}}}),
+							 3)
+		  == CanonicalABWord(
+			{{PlantZoneState{Location{"s0"}, "c1", 2}}, {PlantZoneState{Location{"s0"}, "c0", 1}}}));
+	const logic::AtomicProposition<std::string> a{"a"};
+	const logic::AtomicProposition<std::string> b{"b"};
+	CHECK(get_time_successor(CanonicalABWord({{ATAZoneState{a, 0}},
+											  {ATAZoneState{b, 1}},
+											  {ATAZoneState{a || b, 3}}}),
+							 3)
+		  == CanonicalABWord(
+			{{ATAZoneState{a, 1}}, {ATAZoneState{b, 1}}, {ATAZoneState{a || b, 3}}}));
+	CHECK(get_time_successor(CanonicalABWord({{ATAZoneState{a, 7}}}), 3)
+		  == CanonicalABWord({{ATAZoneState{a, 7}}}));
+	CHECK(get_time_successor(CanonicalABWord({{ATAZoneState{b, 3}}, {ATAZoneState{a, 7}}}), 3)
+		  == CanonicalABWord({{ATAZoneState{b, 4}}, {ATAZoneState{a, 7}}}));
+
+	CHECK(get_time_successor(CanonicalABWord({{ATAZoneState{b, 3}, ATAZoneState{a, 7}}}), 3)
+		  == CanonicalABWord({{ATAZoneState{b, 4}}, {ATAZoneState{a, 7}}}));
+
+	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s1"}, "c0", 4}},
+											  {PlantZoneState{Location{"s0"}, "c0", 3}},
+											  {ATAZoneState{a, 7}}}),
+							 3)
+		  == CanonicalABWord({{PlantZoneState{Location{"s1"}, "c0", 5}},
+							  {PlantZoneState{Location{"s0"}, "c0", 3}},
+							  {ATAZoneState{a, 7}}}));
+	CHECK(get_time_successor(CanonicalABWord({{ATAZoneState{b, 1}, ATAZoneState{a, 3}}}), 3)
+		  == CanonicalABWord({{ATAZoneState{b, 2}, ATAZoneState{a, 4}}}));
+	CHECK(get_time_successor(
+			CanonicalABWord({{PlantZoneState{Location{"l0"}, "x", 1}, ATAZoneState{a, 5}}}), 2)
+		  == CanonicalABWord({{PlantZoneState{Location{"l0"}, "x", 2}}, {ATAZoneState{a, 5}}}));
+
+	CHECK(get_time_successor(CanonicalABWord{{PlantZoneState{Location{"l0"}, "x0", 0}},
+											 {PlantZoneState{Location{"l0"}, "x1", 1}},
+											 {PlantZoneState{Location{"l0"}, "x3", 3}}},
+							 1)
+		  == CanonicalABWord{{PlantZoneState{Location{"l0"}, "x0", 1}},
+							 {PlantZoneState{Location{"l0"}, "x1", 1}},
+							 {PlantZoneState{Location{"l0"}, "x3", 3}}});
+	// x2 is incremented and should end up in the last partition with the maxed regions.
+	CHECK(get_time_successor(CanonicalABWord{{PlantZoneState{Location{"l0"}, "x2", 2}},
+											 {PlantZoneState{Location{"l0"}, "x3", 3}}},
+							 1)
+		  == CanonicalABWord{
+			{PlantZoneState{Location{"l0"}, "x2", 3}, PlantZoneState{Location{"l0"}, "x3", 3}}});
+	CHECK(get_time_successor(CanonicalABWord{{PlantZoneState{Location{"l0"}, "x0", 0},
+											  PlantZoneState{Location{"l0"}, "x2", 2}},
+											 {PlantZoneState{Location{"l0"}, "x1", 1}},
+											 {PlantZoneState{Location{"l0"}, "x3", 3}}},
+							 1)
+		  == CanonicalABWord{{PlantZoneState{Location{"l0"}, "x0", 1}},
+							 {PlantZoneState{Location{"l0"}, "x1", 1}},
+							 {PlantZoneState{Location{"l0"}, "x2", 3},
+							  PlantZoneState{Location{"l0"}, "x3", 3}}});
+
+	// Both x0 and x2 are incremented and should be split. x2 should end up in the maxed partition
+	// with x3.
+	CHECK(get_time_successor(CanonicalABWord{{PlantZoneState{Location{"l0"}, "x0", 0},
+											  PlantZoneState{Location{"l0"}, "x2", 2}},
+											 {PlantZoneState{Location{"l0"}, "x3", 3}}},
+							 1)
+		  == CanonicalABWord{{PlantZoneState{Location{"l0"}, "x0", 1}},
+							 {PlantZoneState{Location{"l0"}, "x2", 3},
+							  PlantZoneState{Location{"l0"}, "x3", 3}}});
+
+	// Successor of successor.
+	CHECK(get_time_successor(
+			get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 0}}}), 3), 3)
+		  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 2}}}));
+	CHECK(search::get_nth_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 0}}}),
+										 2,
+										 3)
+		  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 2}}}));
+	CHECK(search::get_nth_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 0}}}),
+										 0,
+										 3)
+		  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 0}}}));
+	CHECK(search::get_nth_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 0}}}),
+										 7,
+										 3)
+		  == search::get_nth_time_successor(
+			CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 0}}}), 8, 3));
+	CHECK(get_time_successor(CanonicalABWord{{ATAZoneState{a, 0}},
+											 {PlantZoneState{Location{"s0"}, "c0", 1}}},
+							 1)
+		  == CanonicalABWord{{ATAZoneState{a, 1}}, {PlantZoneState{Location{"s0"}, "c0", 1}}});
+	CHECK(get_time_successor(CanonicalABWord{{ATAZoneState{a, 1}},
+											 {PlantZoneState{Location{"s0"}, "c0", 1}}},
+							 1)
+		  == CanonicalABWord{{PlantZoneState{Location{"s0"}, "c0", 2}}, {ATAZoneState{a, 1}}});
+	#endif
+}
+
+#if true
 TEST_CASE("Railroad example using zones", "[zones]")
 {
 	const auto &[plant, spec, controller_actions, environment_actions] = create_crossing_problem({2});
@@ -182,15 +416,17 @@ TEST_CASE("Railroad example using zones", "[zones]")
 	search.build_tree(true);
 	CHECK(search.get_root()->label == search::NodeLabel::TOP);
 
+	#if true
 	const int num_crossings = 2;
-
 	visualization::search_tree_to_graphviz(*search.get_root(), true)
 	  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
 	visualization::ta_to_graphviz(controller_synthesis::create_controller(
-	                                search.get_root(), controller_actions, environment_actions, 2),
-	                              false)
+									search.get_root(), controller_actions, environment_actions, 2),
+								  false)
 	  .render_to_file(fmt::format("railroad{}_controller.pdf", num_crossings));
+	#endif
 }
+#endif
 
 } // namespace
 

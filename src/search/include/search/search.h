@@ -59,6 +59,10 @@ has_satisfiable_ata_configuration(
 				         return std::holds_alternative<ATARegionState<ConstraintSymbolType>>(region_symbol)
 				                && std::get<ATARegionState<ConstraintSymbolType>>(region_symbol).location
 				                     == logic::MTLFormula<ConstraintSymbolType>{
+				                       mtl_ata_translation::get_sink<ConstraintSymbolType>()} ||
+								std::holds_alternative<ATAZoneState<ConstraintSymbolType>>(region_symbol)
+				                && std::get<ATAZoneState<ConstraintSymbolType>>(region_symbol).location
+				                     == logic::MTLFormula<ConstraintSymbolType>{
 				                       mtl_ata_translation::get_sink<ConstraintSymbolType>()};
 			         })
 			       != std::end(component);
@@ -206,6 +210,7 @@ public:
 	 * @param incremental_labeling True, if incremental labeling should be used (default=false)
 	 * @param terminate_early If true, cancel the children of a node that has already been labeled
 	 * @param search_heuristic The heuristic to use during tree expansion
+	 * @param use_zones Whether to use zones, otherwise regions are used
 	 */
 	TreeSearch(
 		// const automata::ta::TimedAutomaton<Location, ActionType> *                                ta,

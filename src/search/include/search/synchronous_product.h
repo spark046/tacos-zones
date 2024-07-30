@@ -39,10 +39,9 @@ template <typename Location, typename ConstraintSymbolType>
 std::set<ABRegionSymbol<Location, ConstraintSymbolType>>
 increment_region_indexes(
   const std::set<ABRegionSymbol<Location, ConstraintSymbolType>> &configurations,
-  RegionIndex                                                     max_region_index,
-  bool                                                            use_zones = false)
+  RegionIndex                                                     max_region_index)
 {
-	if(!use_zones)
+	if(std::holds_alternative<PlantRegionState<Location>>(*configurations.begin()) || std::holds_alternative<ATARegionState<ConstraintSymbolType>>(*configurations.begin()))
 	{
 		// Assert that our assumption holds: All region indexes are either odd or even, never mixed, and all configurations are regionalized.
 		assert(
@@ -93,38 +92,50 @@ increment_region_indexes(
 		);
 
 		std::set<ABRegionSymbol<Location, ConstraintSymbolType>> res;
+		//Max Constant
+		RegionIndex K = (max_region_index - 1) / 2; //Inverse from get_time_successor, not sure why it is done like this
+		//if(max_region_index % 2 == 0) {
+		//	K = max_region_index / 2;
+		//} else {
+		//	K = (max_region_index+1) / 2;
+		//}
 		
 		std::transform(configurations.begin(),
 					   configurations.end(),
 					   std::inserter(res, res.end()),
-					   [max_region_index](auto configuration) {
+					   [K](auto configuration) {
 							if (std::holds_alternative<PlantZoneState<Location>>(configuration)) {
 								PlantZoneState<Location> &ta_configuration = std::get<PlantZoneState<Location>>(configuration);
+								//TODO: Move this to automata_zones.h as properties of zone_slices may be violated here. Or just make this more robust
 
 								//Virtually increment region indexes only. This means:
 								//1. An interval starting/ending at an integer (i.e. closed) gets incremented so that it starts/ends within the next open interval
 								//2. An interval starting/ending within an open interval, gets incremented so that it starts/ends at the next integer
 
-								//If we are at the max, don't care anymore
-								if(ta_configuration.symbolic_valuation.lower_bound_ >= (max_region_index / 2) )
+								//If we are not at the max, increment the region
+								if(ta_configuration.symbolic_valuation.lower_bound_ < K)
 								{
-									if(ta_configuration.symbolic_valuation.lower_isStrict_) {
-										ta_configuration.symbolic_valuation.lower_isStrict_ = false;
+									if(ta_configuration.symbolic_valuation.lower_isOpen_) {
+										ta_configuration.symbolic_valuation.lower_isOpen_ = false;
 										ta_configuration.symbolic_valuation.lower_bound_ += 1;
 									} else {
-										ta_configuration.symbolic_valuation.lower_isStrict_ = true;
+										ta_configuration.symbolic_valuation.lower_isOpen_ = true;
 									}
+								} else {
+									ta_configuration.symbolic_valuation.lower_isOpen_ = false;
 								}
 
-								//If we are at the max, don't care anymore
-								if(ta_configuration.symbolic_valuation.upper_bound_ >= (max_region_index / 2) )
+								//If we are not at the max, increment the region
+								if(ta_configuration.symbolic_valuation.upper_bound_ < K)
 								{
-									if(ta_configuration.symbolic_valuation.upper_isStrict_) {
-										ta_configuration.symbolic_valuation.upper_isStrict_ = false;
-										ta_configuration.symbolic_valuation.upper_bound_ += 1;
+									if(ta_configuration.symbolic_valuation.upper_isOpen_) {
+										ta_configuration.symbolic_valuation.upper_isOpen_ = false;
 									} else {
-										ta_configuration.symbolic_valuation.upper_isStrict_ = true;
+										ta_configuration.symbolic_valuation.upper_isOpen_ = true;
+										ta_configuration.symbolic_valuation.upper_bound_ += 1;
 									}
+								} else {
+									ta_configuration.symbolic_valuation.upper_isOpen_ = false;
 								}
 							} else {
 								auto &ata_configuration =
@@ -134,26 +145,30 @@ increment_region_indexes(
 								//1. An interval starting/ending at an integer (i.e. closed) gets incremented so that it starts/ends within the next open interval
 								//2. An interval starting/ending within an open interval, gets incremented so that it starts/ends at the next integer
 
-								//If we are at the max, don't care anymore
-								if(ata_configuration.symbolic_valuation.lower_bound_ <= (max_region_index / 2) )
+								//If we are not at the max, increment the region
+								if(ata_configuration.symbolic_valuation.lower_bound_ < K )
 								{
-									if(ata_configuration.symbolic_valuation.lower_isStrict_) {
-										ata_configuration.symbolic_valuation.lower_isStrict_ = false;
+									if(ata_configuration.symbolic_valuation.lower_isOpen_) {
+										ata_configuration.symbolic_valuation.lower_isOpen_ = false;
 										ata_configuration.symbolic_valuation.lower_bound_ += 1;
 									} else {
-										ata_configuration.symbolic_valuation.lower_isStrict_ = true;
+										ata_configuration.symbolic_valuation.lower_isOpen_ = true;
 									}
+								} else {
+									ata_configuration.symbolic_valuation.lower_isOpen_ = false;
 								}
 
-								//If we are at the max, don't care anymore
-								if(ata_configuration.symbolic_valuation.upper_bound_ <= (max_region_index / 2) )
+								//If we are not at the max, increment the region
+								if(ata_configuration.symbolic_valuation.upper_bound_ < K )
 								{
-									if(ata_configuration.symbolic_valuation.upper_isStrict_) {
-										ata_configuration.symbolic_valuation.upper_isStrict_ = false;
-										ata_configuration.symbolic_valuation.upper_bound_ += 1;
+									if(ata_configuration.symbolic_valuation.upper_isOpen_) {
+										ata_configuration.symbolic_valuation.upper_isOpen_ = false;
 									} else {
-										ata_configuration.symbolic_valuation.upper_isStrict_ = true;
+										ata_configuration.symbolic_valuation.upper_isOpen_ = true;
+										ata_configuration.symbolic_valuation.upper_bound_ += 1;
 									}
+								} else {
+									ata_configuration.symbolic_valuation.upper_isOpen_ = false;
 								}
 							}
 							return configuration;
@@ -241,8 +256,8 @@ get_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word, 
 		//if the first partition's zone starts at an integer, we can simple make it an open interval
 		//otherwise, the lastnonmaxed partition's upperbound gets incremented by going to the next open interval or next integer.
 
-		const bool first_partition_open = get_zone_slice(*word.begin()->begin()).lower_isStrict_;
-		if(first_partition_open) {
+		const bool first_partition_open = get_zone_slice(*word.begin()->begin(), K).lower_isOpen_;
+		if(!first_partition_open) {
 			auto incremented = increment_region_indexes(*word.begin(), max_region_index);
 			std::set<ABRegionSymbol<Location, ConstraintSymbolType>> incremented_nonmaxed;
 			for (auto &configuration : incremented) {
@@ -336,7 +351,7 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 
 				plant_configuration.location = ta_zone_state.location;
 
-				if(zone.lower_isStrict_) //Check if we can have an integer or not
+				if(zone.lower_isOpen_) //Check if we can have an integer or not
 				{
 					plant_configuration.clock_valuations[clock_name] = ((ClockValuation) zone.lower_bound_) + time_delta * static_cast<Time>((i + 1));
 				} else {
@@ -349,7 +364,7 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 
 				assert(zone.lower_bound_ <= zone.upper_bound_); //make sure zone is not empty set
 
-				if(zone.lower_isStrict_) //Check if we can have an integer or not
+				if(zone.lower_isOpen_) //Check if we can have an integer or not
 				{
 					ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_zone_state.location, ((ClockValuation) zone.lower_bound_) + time_delta * static_cast<Time>((i + 1))});
 				} else {
