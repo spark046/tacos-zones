@@ -38,7 +38,8 @@ operator()(
                                                  logic::AtomicProposition<ATAInputType>> &ata,
   const std::pair<GologConfiguration, ATAConfiguration<std::string>> &ab_configuration,
   [[maybe_unused]] const RegionIndex                                  increment,
-  const RegionIndex                                                   K)
+  const RegionIndex                                                   K,
+  const bool)
 {
 	std::multimap<std::string, CanonicalABWord<GologLocation, std::string>> successors;
 	const auto &[_, remaining_program, history] = ab_configuration.first.location;

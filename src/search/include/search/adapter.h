@@ -11,7 +11,6 @@
 #include "search/canonical_word.h"
 
 #include <map>
-
 namespace tacos::search {
 
 /** @brief Generic functor to get the next canonical word.
@@ -44,7 +43,8 @@ public:
 	    &,
 	  const std::pair<typename Plant::Configuration, ATAConfiguration<ConstraintSymbolType>> &,
 	  const RegionIndex,
-	  const RegionIndex)
+	  const RegionIndex,
+	  const bool)
 	{
 		throw std::logic_error("Missing specialization for get_next_canonical_words, did you forget to "
 		                       "include the adapter specialization?");

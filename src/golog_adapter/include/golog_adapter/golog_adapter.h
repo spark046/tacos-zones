@@ -75,7 +75,8 @@ public:
 	                                                 logic::AtomicProposition<ATAInputType>> &ata,
 	  const std::pair<GologConfiguration, ATAConfiguration<std::string>> &ab_configuration,
 	  const RegionIndex                                                   increment,
-	  const RegionIndex                                                   K);
+	  const RegionIndex                                                   K,
+	  const bool);
 
 private:
 	std::set<std::string> controller_actions;
