@@ -55,6 +55,18 @@ namespace tacos::zones {
 		return ret;
 	}
 
+	bool
+	is_valid_zone(const Zone_slice &zone)
+	{
+		return  (zone.lower_bound_ <= zone.upper_bound_) &&
+				(zone.lower_bound_ <= zone.max_constant_) &&
+				(zone.upper_bound_ <= zone.max_constant_) &&
+				//If both bounds are equal, none of the bounds may be open since this would lead to a contradiction (e.g. a < x < a ==> a < a)
+				(zone.lower_bound_ < zone.upper_bound_ || !(zone.lower_isOpen_ || zone.upper_isOpen_) ||
+				//One of the bounds can be open if the interval actually stretches towards infinity
+				(zone.lower_isOpen_ && !zone.upper_isOpen_ && zone.upper_bound_ == zone.max_constant_));
+	}
+
 	std::ostream &
 	operator<<(std::ostream &os, const zones::Zone_slice &zone_slice)
 	{

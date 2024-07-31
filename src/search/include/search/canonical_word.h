@@ -170,6 +170,18 @@ bool
 is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &word,
                         RegionIndex                                            max_region = 0)
 {
+	// TODO all ta_symbols should agree on the same location
+	// TODO clocks must have unique values (i.e., must not occur multiple times)
+	if (word.empty()) {
+		throw InvalidCanonicalWordException(word, "word is empty");
+	}
+	// No configuration should be empty
+	if (std::any_of(word.begin(), word.end(), [](const auto &configurations) {
+		    return configurations.empty();
+	    })) {
+		throw InvalidCanonicalWordException(word, "word contains an empty configuration");
+	}
+
 	// There cannot be both regionalized ABSymbols and ABSymbols using zones.
 	//Check whether the "first" element is regionalized or not, we then check whether the rest matches
 	bool regionalized = (std::holds_alternative<PlantRegionState<Location>>(*word[0].begin()) || std::holds_alternative<ATARegionState<ConstraintSymbolType>>(*word[0].begin()) );
@@ -192,18 +204,6 @@ is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &w
 		}
 
 	});
-
-	// TODO all ta_symbols should agree on the same location
-	// TODO clocks must have unique values (i.e., must not occur multiple times)
-	if (word.empty()) {
-		throw InvalidCanonicalWordException(word, "word is empty");
-	}
-	// No configuration should be empty
-	if (std::any_of(word.begin(), word.end(), [](const auto &configurations) {
-		    return configurations.empty();
-	    })) {
-		throw InvalidCanonicalWordException(word, "word contains an empty configuration");
-	}
 
 	if(regionalized)
 	{

@@ -56,14 +56,14 @@ has_satisfiable_ata_configuration(
 			         std::begin(component),
 			         std::end(component),
 			         [](const auto &region_symbol) {
-				         return std::holds_alternative<ATARegionState<ConstraintSymbolType>>(region_symbol)
+				         return (std::holds_alternative<ATARegionState<ConstraintSymbolType>>(region_symbol)
 				                && std::get<ATARegionState<ConstraintSymbolType>>(region_symbol).location
 				                     == logic::MTLFormula<ConstraintSymbolType>{
-				                       mtl_ata_translation::get_sink<ConstraintSymbolType>()} ||
-								std::holds_alternative<ATAZoneState<ConstraintSymbolType>>(region_symbol)
+				                       mtl_ata_translation::get_sink<ConstraintSymbolType>()}) ||
+								(std::holds_alternative<ATAZoneState<ConstraintSymbolType>>(region_symbol)
 				                && std::get<ATAZoneState<ConstraintSymbolType>>(region_symbol).location
 				                     == logic::MTLFormula<ConstraintSymbolType>{
-				                       mtl_ata_translation::get_sink<ConstraintSymbolType>()};
+				                       mtl_ata_translation::get_sink<ConstraintSymbolType>()});
 			         })
 			       != std::end(component);
 		});
