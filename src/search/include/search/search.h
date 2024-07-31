@@ -106,8 +106,8 @@ label_graph(SearchTreeNode<Location, ActionType, ConstraintSymbolType> *node,
 			}
 		}
 		bool        has_enviroment_step{false};
-		SymbolicRepresentation first_good_controller_step{std::numeric_limits<RegionIndex>::max()};
-		SymbolicRepresentation first_bad_environment_step{std::numeric_limits<RegionIndex>::max()};
+		RegionIndex first_good_controller_step{std::numeric_limits<RegionIndex>::max()};
+		RegionIndex first_bad_environment_step{std::numeric_limits<RegionIndex>::max()};
 		for (const auto &[timed_action, child] : node->get_children()) {
 			const auto &[step, action] = timed_action;
 			if (controller_actions.find(action) != std::end(controller_actions)) {
@@ -479,9 +479,11 @@ private:
 			return {};
 		}
 		assert(node->get_children().empty());
-		std::map<std::pair<SymbolicRepresentation, ActionType>,
+		std::map<std::pair<RegionIndex, ActionType>,
 		         std::set<CanonicalABWord<Location, ConstraintSymbolType>>>
 		  child_classes;
+
+		bool use_zones = std::is_same<SymbolicRepresentation, zones::Zone_slice>::value;
 
 		const auto time_successors = get_time_successors(node->words, K_);
 		for (std::size_t increment = 0; increment < time_successors.size(); ++increment) {
@@ -492,7 +494,7 @@ private:
 				                           ConstraintSymbolType,
 				                           use_location_constraints,
 				                           use_set_semantics>(controller_actions_, environment_actions_)(
-				    *ta_, *ata_, get_candidate(time_successor), increment, K_);
+				    *ta_, *ata_, get_candidate(time_successor), increment, K_, use_zones);
 				for (const auto &[symbol, successor] : successors) {
 					assert(
 					  std::find(std::begin(controller_actions_), std::end(controller_actions_), symbol)
