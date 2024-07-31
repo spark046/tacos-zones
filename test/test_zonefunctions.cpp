@@ -55,9 +55,8 @@ using DisjunctionFormula        = automata::ata::DisjunctionFormula<std::string>
 using ResetClockFormula         = automata::ata::ResetClockFormula<std::string>;
 
 using AP                        = logic::AtomicProposition<std::string>;
-using Plant = automata::ta::TimedAutomaton<std::vector<std::string>, std::string>;
 using TreeSearch =
-  search::TreeSearch<automata::ta::Location<std::vector<std::string>>, std::string, std::string, false, Plant, false, RegionIndex>;
+  search::TreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
 
 using PlantZoneState = search::PlantZoneState<Location>;
 using ATAZoneState = search::ATAZoneState<std::string>;

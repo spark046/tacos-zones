@@ -56,7 +56,7 @@ enum class LabelReason {
 
 /** @brief A node in the search tree
  * @see TreeSearch */
-template <typename Location, typename ActionType, typename ConstraintSymbolType = ActionType, typename SymbolicRepresentation = RegionIndex>
+template <typename Location, typename ActionType, typename ConstraintSymbolType = ActionType>
 class SearchTreeNode
 {
 public:

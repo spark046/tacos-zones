@@ -15,7 +15,7 @@
 
 namespace tacos::search {
 
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename SymbolicRepresentation>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
 class SearchTreeNode;
 
 /**
@@ -85,12 +85,12 @@ is_monotonically_dominated(const std::set<CanonicalABWord<LocationT, ConstraintS
  * been seen, the check is aborted.
  * @return true if the given node or one of its ancestors is monotonically dominated
  */
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename SymbolicRepresentation = RegionIndex>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
 bool
 ancestor_is_monotonically_dominated(
-  const SearchTreeNode<LocationT, ActionT, ConstraintSymbolT, SymbolicRepresentation> &               node,
+  const SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> &               node,
   const std::set<CanonicalABWord<LocationT, ConstraintSymbolT>> &             words,
-  std::vector<const SearchTreeNode<LocationT, ActionT, ConstraintSymbolT, SymbolicRepresentation> *> &seen_nodes)
+  std::vector<const SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> *> &seen_nodes)
 {
 	if (std::find(std::begin(seen_nodes), std::end(seen_nodes), &node) != std::end(seen_nodes)) {
 		return false;
@@ -108,11 +108,11 @@ ancestor_is_monotonically_dominated(
 /** Check if there is an ancestor that monotonally dominates the given node
  * @param node The node to check
  */
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename SymbolicRepresentation = RegionIndex>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
 bool
-dominates_ancestor(SearchTreeNode<LocationT, ActionT, ConstraintSymbolT, SymbolicRepresentation> *node)
+dominates_ancestor(SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> *node)
 {
-	std::vector<const SearchTreeNode<LocationT, ActionT, ConstraintSymbolT, SymbolicRepresentation> *> seen_nodes = {node};
+	std::vector<const SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> *> seen_nodes = {node};
 	return std::any_of(node->parents.begin(),
 	                   node->parents.end(),
 	                   [node, &seen_nodes](const auto &parent) {
