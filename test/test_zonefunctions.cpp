@@ -291,7 +291,7 @@ TEST_CASE("Get time successors of CanonicalABWords using zones", "[zones]")
 		  == CanonicalABWord(
 			{{PlantZoneState{Location{"s0"}, "c1", zone_gtr_1}}, {PlantZoneState{Location{"s0"}, "c0", zone_gtr_0}}}));
 	
-	//TODO: Refactor all tests
+	//TODO: Refactor all further tests
 	#if false
 	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 1}},
 											  {PlantZoneState{Location{"s0"}, "c1", 1}}}),

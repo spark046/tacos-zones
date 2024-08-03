@@ -228,8 +228,6 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 
 	/** Compare two zone states.
 	 * 
-	 * TODO: Symbolic Time comparison probably does not work yet due to multimap
-	 * 
 	 * @param s1 The first state
 	 * @param s2 The second state
 	 * @return true if s1 is lexicographically smaller than s2
@@ -244,8 +242,6 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 	/** Check two zone states for equality.
 	 * Two symbolic states are considered equal if they have the same location(, clock name), and
 	 * symbolic time.
-	 * 
-	 * TODO: Symbolic Time probably does not work yet due to multimap
 	 * 
 	 * @param s1 The first state
 	 * @param s2 The second state

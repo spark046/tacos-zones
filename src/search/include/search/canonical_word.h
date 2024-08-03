@@ -372,7 +372,6 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 		assert(is_valid_canonical_word(abs, 2 * K + 1));
 		return abs;
 	} else {
-		//TODO: For each clock valuation v, zones(v) is the set of all clock constraints that are fulfilled by v
 		CanonicalABWord<Location, ConstraintSymbolType> abs;
 
 		for (const auto &[fractional_part, g_i] : partitioned_g) {
@@ -411,8 +410,6 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 	}
 	
 }
-
-//TODO Make some output functions for ostream etc.
 
 /** Print an ABRegionSymbol. */
 template <typename LocationT, typename ConstraintSymbolType>
