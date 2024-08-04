@@ -102,13 +102,16 @@ TEST_CASE("Delaying zones of zone states", "[zones]")
 	zones::Zone_slice zone4 = zones::Zone_slice(constraint4, "x");
 
 	search::PlantZoneState<std::string> ta_state1 = {"l0", "x", constraint1};
-	CHECK(ta_state1.get_increment_valuation() == zone1);
+	ta_state1.increment_valuation();
+	CHECK(ta_state1.symbolic_valuation == zone1);
 
 	search::PlantZoneState<std::string> ta_state2 = {"l0", "x", constraint2};
-	CHECK(ta_state2.get_increment_valuation() == zone1);
+	ta_state2.increment_valuation();
+	CHECK(ta_state2.symbolic_valuation == zone1);
 
 	search::PlantZoneState<std::string> ta_state3 = {"l0", "x", constraint3};
-	CHECK(ta_state3.get_increment_valuation() == zone4);
+	ta_state3.increment_valuation();
+	CHECK(ta_state3.symbolic_valuation == zone4);
 }
 
 TEST_CASE("Getting Clock Constraints from ATA", "[zones]")

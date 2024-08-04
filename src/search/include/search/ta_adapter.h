@@ -106,6 +106,7 @@ public:
 
 					std::multimap<std::string, automata::ClockConstraint> constraints = {};
 					if(use_zones) {
+						//TODO: Get Clock constraints of symbol steps
 						constraints = ta.get_clock_constraints();
 						std::set<automata::ClockConstraint> ata_constraints = ata.get_clock_constraints();
 

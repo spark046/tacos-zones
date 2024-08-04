@@ -65,6 +65,14 @@ using ATAState = automata::ata::State<logic::MTLFormula<ConstraintSymbolType>>;
 template<typename LocationType, typename SymbolicRepresentationType>
 struct SymbolicState
 {
+protected:
+	/**
+	 * Increments a state by one time step
+	 * 
+	 * @param max_region_index The maximal constant that should not be exceeded represented as a RegionIndex
+	 */
+	virtual void virt_increment_valuation(RegionIndex max_region_index) = 0;
+
 public:
 	LocationType location;
 
@@ -79,13 +87,15 @@ public:
 	}
 
 	/**
-	 * Calculates what the valuation would become if it was incremented by one step, and then it is returned.
+	 * Increments a state by one time step.
+	 * Regions are just incremented by one, while zones are delayed
 	 * 
-	 * The state itself does not directly change from this.
-	 * 
-	 * @return The incremented valuation
+	 * @param max_region_index The maximal constant that should not be exceeded represented as a RegionIndex
 	 */
-	virtual SymbolicRepresentationType get_increment_valuation() const = 0;
+	void increment_valuation(RegionIndex max_region_index = 0)
+	{
+		virt_increment_valuation(max_region_index);
+	}
 
 	/** Compare two symbolic states.
 	 * @param s1 The first state
@@ -129,9 +139,11 @@ struct PlantRegionState : public SymbolicState<LocationT, RegionIndex>
 	}
 
 
-	RegionIndex get_increment_valuation() const
+	void virt_increment_valuation(RegionIndex max_region_index)
 	{
-		return Base::symbolic_valuation + 1;
+		if(Base::symbolic_valuation < max_region_index) {
+			Base::symbolic_valuation += 1;
+		}
 	}
 };
 
@@ -150,9 +162,11 @@ struct ATARegionState : public SymbolicState<logic::MTLFormula<ConstraintSymbolT
 		//Nothing here...
 	}
 
-	RegionIndex get_increment_valuation() const
+	void virt_increment_valuation(RegionIndex max_region_index)
 	{
-		return Base::symbolic_valuation + 1;
+		if(Base::symbolic_valuation < max_region_index) {
+			Base::symbolic_valuation += 1;
+		}
 	}
 };
 
@@ -198,31 +212,30 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 	}
 
 	/**
-	 * Returns an incremented zone by delaying it.
+	 * Delays a zone by incrementing all clock valuations by any arbitrary amount.
 	 * 
-	 * A zone is delayed by incrementing all clock valuations by any arbitrary amount.
+	 * In particular, this means all zones upper bounds are stretched to infinity.
+	 * This means they are set to the maximal constant.
 	 * 
-	 * In particular, this means all equality constraints become greater equal constraints, all less (and equal)
-	 * constraints disappear, and all greater (and equal) constraints remain.
-	 * Not equal constraints also disappear, as long as it is not the smallest constant, i.e. there could have been
-	 * a valuation below it to delay into the inequality.
-	 * 
-	 * @return A multimap consisting of all the new constraints (and missing the unnecessary ones).
+	 * If the previous maximal constant is smaller than the parameter given, then the maximal constant is also updated.
 	 */
-	ZoneSlice get_increment_valuation() const
+	void virt_increment_valuation(RegionIndex max_region_index)
 	{
-		Endpoint max_valuation;
-		if(Base::symbolic_valuation.max_constant_ > 0) {
-			max_valuation = Base::symbolic_valuation.max_constant_;
-		} else {
-			max_valuation = std::numeric_limits<Endpoint>::max();
-		}
+		ZoneSlice &zone = Base::symbolic_valuation;
 
-		if(Base::symbolic_valuation.upper_bound_ >= max_valuation)
-		{
-			return Base::symbolic_valuation;
+		Endpoint K = (max_region_index - 1) / 2; //Inverse from search::get_time_successor, not sure why it is done like this instead of checking whether it's even, etc.
+
+		//If even the lower bound is larger than the max constant, something is pretty wrong
+		assert(zone.lower_bound_ >= K);
+
+		//We take/keep the larger of the two maximal constants 
+		if(zone.max_constant_ > K) {
+			zone.upper_bound_ = zone.max_constant_;
+			zone.upper_isOpen_ = false;
 		} else {
-			return zones::Zone_slice(Base::symbolic_valuation.lower_bound_, max_valuation, Base::symbolic_valuation.lower_isOpen_, false);
+			zone.upper_bound_ = K;
+			zone.upper_isOpen_ = false;
+			zone.max_constant_ = K;
 		}
 	}
 

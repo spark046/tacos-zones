@@ -149,12 +149,26 @@
 		 * 
 		 * I.e. This zone is intersected with the zone associated with the clock constraint.
 		 * 
-		 * @param constraint: automata::ClockConstraint The clock constraint representing the other zone
+		 * @param constraint The clock constraint representing the other zone
 		 */
 		void conjunct(automata::ClockConstraint constraint)
 		{
 			Zone_slice zone2 = Zone_slice(constraint);
 			this->intersect(zone2);
+		}
+
+		/**
+		 * Conjunct several clock constraints with this zone slice
+		 * 
+		 * @param constraints Multimap of clock constraints that are conjuncted with this zone
+		 * @param clock Name of the clock from which the clock constraints should be taken from
+		 */
+		void conjunct(std::multimap<std::string, automata::ClockConstraint> constraints, std::string clock) {
+			for(auto iter1 = constraints.begin(); iter1 != constraints.end(); iter1++) {
+				if(iter1->first == clock) {
+					this->conjunct(iter1->second);
+				}
+			}
 		}
 
 		/**

@@ -70,17 +70,17 @@ get_region_index(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
 		zones::Zone_slice zone = std::get<PlantZoneState<Location>>(w).symbolic_valuation;
 
 		if(zone.lower_isOpen_) {
-			return (zone.lower_bound_ * 2) - 1;
+			return (zone.upper_bound_ * 2) - 1;
 		} else {
-			return zone.lower_bound_ * 2;
+			return zone.upper_bound_ * 2;
 		}
 	} else { //ATAZoneState
 		zones::Zone_slice zone = std::get<ATAZoneState<ConstraintSymbolType>>(w).symbolic_valuation;
 
 		if(zone.lower_isOpen_) {
-			return (zone.lower_bound_ * 2) - 1;
+			return (zone.upper_bound_ * 2) - 1;
 		} else {
-			return zone.lower_bound_ * 2;
+			return zone.upper_bound_ * 2;
 		}
 	}
 }
