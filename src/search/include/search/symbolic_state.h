@@ -183,8 +183,8 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 	//saving a second mouthful
 	using Base = SymbolicState<LocationType, ZoneSlice>;
 
-	ZoneState(LocationType location_p, std::string clock_p, ZoneSlice constraints_p) : 
-	Base::SymbolicState(location_p, clock_p, constraints_p)
+	ZoneState(LocationType location_p, std::string clock_p, ZoneSlice zone_p) : 
+	Base::SymbolicState(location_p, clock_p, zone_p)
 	{
 
 	}
@@ -193,6 +193,10 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 	ZoneState(LocationType location_p, std::string clock_p, std::multimap<std::string, automata::ClockConstraint> clock_constraint, Endpoint max_constant = 0) :
 	Base::SymbolicState(location_p, clock_p, [&clock_constraint, &clock_p, &max_constant](){
 		ZoneSlice ret = ZoneSlice(0, std::numeric_limits<Endpoint>::max(), false, false, max_constant);
+
+		if(max_constant > 0) {
+			ret.upper_bound_ = max_constant;
+		}
 
 		if(clock_constraint.empty()) {
 			return ret;
@@ -223,15 +227,23 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 	{
 		ZoneSlice &zone = Base::symbolic_valuation;
 
-		Endpoint K = (max_region_index - 1) / 2; //Inverse from search::get_time_successor, not sure why it is done like this instead of checking whether it's even, etc.
+		//If max_region_index is 0, then K is too.
+		//Inverse from search::get_time_successor, not sure why it is done like this instead of checking whether it's even, etc.
+		Endpoint K = max_region_index == 0 ? 0 : (max_region_index - 1) / 2;
 
 		//If even the lower bound is larger than the max constant, something is pretty wrong
-		assert(zone.lower_bound_ >= K);
+		assert(K == 0 || zone.lower_bound_ <= K);
 
 		//We take/keep the larger of the two maximal constants 
-		if(zone.max_constant_ > K) {
-			zone.upper_bound_ = zone.max_constant_;
-			zone.upper_isOpen_ = false;
+		if(zone.max_constant_ >= K) {
+			if(K == 0) {
+				zone.upper_bound_ = std::numeric_limits<Endpoint>::max();
+				zone.upper_isOpen_ = false;
+				zone.max_constant_ = 0;
+			} else {
+				zone.upper_bound_ = zone.max_constant_;
+				zone.upper_isOpen_ = false;
+			}
 		} else {
 			zone.upper_bound_ = K;
 			zone.upper_isOpen_ = false;

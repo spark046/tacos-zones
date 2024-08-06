@@ -61,10 +61,7 @@
 
 			std::optional<int> relation_opt = automata::get_relation_index(clock_constraint);
 			assert(relation_opt.has_value());
-			int relation = relation_opt.value();
-
-			max_constant_ = max_constant;
-			
+			int relation = relation_opt.value();			
 
 			switch (relation)
 			{
@@ -153,7 +150,7 @@
 		 */
 		void conjunct(automata::ClockConstraint constraint)
 		{
-			Zone_slice zone2 = Zone_slice(constraint);
+			Zone_slice zone2{constraint, this->max_constant_};
 			this->intersect(zone2);
 		}
 
@@ -181,20 +178,16 @@
 			//TODO: Add proper handling
 			assert(!(lower_bound_ > zone2.upper_bound_ || upper_bound_ < zone2.lower_bound_)); //If the intersetion is empty, we don't want this
 
-			if(lower_bound_ < zone2.lower_bound_)
+			if(lower_bound_ <= zone2.lower_bound_)
 			{
 				lower_bound_ = zone2.lower_bound_;
-				lower_isOpen_ = zone2.lower_isOpen_;
-			} else if(lower_bound_ == zone2.lower_bound_) {
-				lower_isOpen_ = lower_isOpen_ || zone2.lower_isOpen_;
+				lower_isOpen_ = zone2.lower_isOpen_ || lower_isOpen_;
 			}
 
-			if(upper_bound_ > zone2.upper_bound_)
+			if(upper_bound_ >= zone2.upper_bound_)
 			{
 				upper_bound_ = zone2.upper_bound_;
-				upper_isOpen_ = zone2.upper_isOpen_;
-			} else if(upper_bound_ == zone2.upper_bound_) {
-				upper_isOpen_ = upper_isOpen_ || zone2.upper_isOpen_;
+				upper_isOpen_ = zone2.upper_isOpen_ || upper_isOpen_;
 			}
 
 			if(max_constant_ > zone2.max_constant_ && zone2.max_constant_ > 0) {

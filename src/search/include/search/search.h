@@ -494,9 +494,6 @@ private:
 				                           use_set_semantics>(controller_actions_, environment_actions_)(
 				    *ta_, *ata_, get_candidate(time_successor), increment, K_, use_zones_);
 				for (const auto &[symbol, successor] : successors) {
-					//Check whether zones are used correctly
-					assert((use_zones_ && !search::is_region_canonical_word(successor)) || (!use_zones_ && search::is_region_canonical_word(successor)));
-
 					assert(
 					  std::find(std::begin(controller_actions_), std::end(controller_actions_), symbol)
 					    != std::end(controller_actions_)

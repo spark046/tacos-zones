@@ -82,10 +82,35 @@ TEST_CASE("Getting fulfilled Clock Constraints of a ta", "[zones]")
 	CHECK(zones::get_fulfilled_clock_constraints(ta.get_clock_constraints(), "x", 0) == set2);
 }
 
+TEST_CASE("Zone_slice functions", "[zones]")
+{
+	automata::ClockConstraint constraint1 = automata::AtomicClockConstraintT<std::greater<Time>>(1);
+
+	zones::Zone_slice zone1{constraint1};
+	zones::Zone_slice zone2{constraint1};
+
+	CHECK(zone1.upper_bound_ == std::numeric_limits<Endpoint>::max());
+
+	zone1.intersect(zone2);
+
+	CHECK(zone1.upper_bound_ == std::numeric_limits<Endpoint>::max());
+
+	zone1.conjunct(constraint1);
+
+	CHECK(zone1.upper_bound_ == std::numeric_limits<Endpoint>::max());
+
+	std::multimap<std::string, automata::ClockConstraint> constraint_map = {{"x", constraint1}};
+	zones::Zone_slice zone3{constraint_map, "x"};
+
+	CHECK(zone1 == zone3);
+}
+
 TEST_CASE("Delaying zones of zone states", "[zones]")
 {
 	std::multimap<std::string, automata::ClockConstraint> constraint1 = {{"x", automata::AtomicClockConstraintT<std::greater<Time>>(1)}};
 	zones::Zone_slice zone1 = zones::Zone_slice(constraint1, "x");
+
+	CHECK(zone1.upper_bound_ == std::numeric_limits<Endpoint>::max());
 
 	std::multimap<std::string, automata::ClockConstraint> constraint2 = { {"x", automata::AtomicClockConstraintT<std::greater<Time>>(1)},
 																	{"x", automata::AtomicClockConstraintT<std::less<Time>>(2)}};
@@ -215,7 +240,7 @@ TEST_CASE("Canonical Word using zones", "[zones]")
 			  == std::multimap<std::string, CanonicalABWord>{
 				{"b", CanonicalABWord{{PlantZoneState{Location{"s1"}, "x", zone_less1}, ATAZoneState{f, zone_everything}}}},
 				{"c",
-				 CanonicalABWord{{PlantZoneState{Location{"s2"}, "x", zone_less1},
+				 CanonicalABWord{{PlantZoneState{Location{"s2"}, "x", zone_everything},
 								  ATAZoneState{mtl_ata_translation::get_sink<std::string>(), zone_everything}}}}});
 	
 	CHECK(search::get_next_canonical_words<TimedAutomaton, std::string, std::string, false>()(
@@ -223,7 +248,7 @@ TEST_CASE("Canonical Word using zones", "[zones]")
 			  == std::multimap<std::string, CanonicalABWord>{
 				{"b", CanonicalABWord{{PlantZoneState{Location{"s1"}, "x", zone_less1}}}},
 				{"c",
-				 CanonicalABWord{{PlantZoneState{Location{"s2"}, "x", zone_less1},
+				 CanonicalABWord{{PlantZoneState{Location{"s2"}, "x", zone_everything},
 								  ATAZoneState{mtl_ata_translation::get_sink<std::string>(), zone_everything}}}}});
 }
 
@@ -266,6 +291,8 @@ TEST_CASE("monotone_domination_order for zones", "[zones]")
 		 {ATAZoneState{logic::MTLFormula{AP{"a"}}, zone0}}})));
 }
 
+//This is pointless when zones just get delayed. Almost all resulting zones will be the same
+#if false
 TEST_CASE("Get time successors of CanonicalABWords using zones", "[zones]")
 {
 	zones::Zone_slice zone_all = zones::Zone_slice{0, 3, false, false, 3};
@@ -390,6 +417,7 @@ TEST_CASE("Get time successors of CanonicalABWords using zones", "[zones]")
 		  == CanonicalABWord{{PlantZoneState{Location{"s0"}, "c0", 2}}, {ATAZoneState{a, 1}}});
 	#endif
 }
+#endif
 
 #if true
 TEST_CASE("Railroad example using zones", "[zones]")

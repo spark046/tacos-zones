@@ -285,8 +285,8 @@ is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &w
 /**
  * @brief Checks whether a canonical word is using regions or not.
  * 
- * @param canonical_word The canonical word being checked
- * @return True if canonical word uses region, false if it uses zones (or is invalid)
+ * @param word The canonical word being checked
+ * @return True if canonical word uses region, false if it uses zones
  */
 template <typename Location, typename ConstraintSymbolType>
 bool

@@ -80,6 +80,7 @@ namespace tacos::zones {
 		{
 			rightBracket = ")";
 		}
+		//Also print the max_constant if we are equal it
 		if(zone_slice.upper_bound_ == zone_slice.max_constant_ && !zone_slice.upper_isOpen_) {
 			os << leftBracket << zone_slice.lower_bound_ << "; " << u8"∞/" << zone_slice.upper_bound_ << ")";
 		} else {
