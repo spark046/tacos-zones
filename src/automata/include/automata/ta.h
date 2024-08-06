@@ -438,6 +438,11 @@ public:
 	std::set<TAConfiguration<LocationT>>
 	make_symbol_step(const TAConfiguration<LocationT> &configuration, const AP &symbol) const;
 
+	/** Compute the resulting configuration and all clock constraints of the transitions after making a symbol step.
+	 */
+	std::pair<std::set<TAConfiguration<LocationT>>, std::multimap<std::string, ClockConstraint>>
+	make_symbol_step_with_constraints(const TAConfiguration<LocationT> &configuration, const AP &symbol) const;
+
 	/// Let the TA make a transition on the given symbol at the given time.
 	/** Check if there is a transition that can be enabled on the given symbol at the given time,
 	 * starting with the given path. If so, modify the given path, i.e., apply the transition by

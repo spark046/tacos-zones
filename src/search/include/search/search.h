@@ -533,8 +533,8 @@ private:
 
 	const Plant *const ta_;
 	const automata::ata::AlternatingTimedAutomaton<logic::MTLFormula<ConstraintSymbolType>,
-	                                               logic::AtomicProposition<ATAInputType>>
-	  *const ata_;
+												   logic::AtomicProposition<ATAInputType>>
+		*const ata_;
 
 	const std::set<ActionType> controller_actions_;
 	const std::set<ActionType> environment_actions_;

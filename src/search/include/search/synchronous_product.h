@@ -79,7 +79,6 @@ increment_region_indexes(
  * Delays all the states of this configuration to increment all the zones.
  * 
  * @param configurations Set of ABRegionSymbols that are supposed to be zones
- * @param clock_constraints The set of clock constraints that restrict this delay
  * @param max_region_index Maximal Constant represented as a RegionIndex
  * @return A copy of the set of ABRegionSymbols, but where each zone has been delayed
  */
@@ -87,7 +86,6 @@ template <typename Location, typename ConstraintSymbolType>
 std::set<ABRegionSymbol<Location, ConstraintSymbolType>>
 increment_zones(
   const std::set<ABRegionSymbol<Location, ConstraintSymbolType>> &configurations,
-  std::multimap<std::string, automata::ClockConstraint>           clock_constraints,
   RegionIndex                                                     max_region_index)
 {
 	//Make sure this is using zones
@@ -102,12 +100,19 @@ increment_zones(
 	//Max Constant
 	RegionIndex K = (max_region_index - 1) / 2; //Inverse from get_time_successor, not sure why it is done like this
 	
+	//TODO: Temp, delete
+	std::multimap<std::string, automata::ClockConstraint> clock_constraints;
+
 	std::transform( configurations.begin(),
 					configurations.end(),
 					std::inserter(res, res.end()),
 					[K, clock_constraints](auto configuration) {
 						if (std::holds_alternative<PlantZoneState<Location>>(configuration)) {
 							auto &state = std::get<PlantZoneState<Location>>(configuration);
+
+							//TODO: Somehow know the transition to take and only get a subset of these Clock Constraints (Possible? Even Necessary? Hopefully not...)
+							//TODO: Get transitions from automata
+							//Get the clock constraints from all transitions out of this state to restrict the delay
 
 							state.increment_valuation(K);
 
@@ -205,12 +210,9 @@ get_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word, 
 		//if the first partition's zone starts at an integer, we can simple make it an open interval
 		//otherwise, the lastnonmaxed partition's upperbound gets incremented by going to the next open interval or next integer.
 
-		//TODO: Get clock constraints of this step so that the delay is restricted by them
-		std::multimap<std::string, automata::ClockConstraint> clock_constraints = {};
-
 		const bool first_partition_open = get_zone_slice(*word.begin()->begin(), K).lower_isOpen_;
 		if(!first_partition_open) {
-			auto incremented = increment_zones(*word.begin(), clock_constraints, max_region_index);
+			auto incremented = increment_zones(*word.begin(), max_region_index);
 			std::set<ABRegionSymbol<Location, ConstraintSymbolType>> incremented_nonmaxed;
 			for (auto &configuration : incremented) {
 				if (get_region_index(configuration) == max_region_index) {
@@ -226,7 +228,7 @@ get_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word, 
 		} else {
 			// Increment the last nonmaxed partition. If we have a new maxed configuration, put it into the
 			// maxed partition. Otherwise, keep it in place.
-			auto incremented = increment_zones(*last_nonmaxed_partition, clock_constraints, max_region_index);
+			auto incremented = increment_zones(*last_nonmaxed_partition, max_region_index);
 			std::set<ABRegionSymbol<Location, ConstraintSymbolType>> incremented_nonmaxed;
 			for (auto &configuration : incremented) {
 				if (get_region_index(configuration) == max_region_index) {
@@ -305,7 +307,7 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 
 				if(zone.lower_isOpen_) //Check if we can have an integer or not
 				{
-					plant_configuration.clock_valuations[clock_name] = ((ClockValuation) zone.lower_bound_) + time_delta * static_cast<Time>((i + 1));
+					plant_configuration.clock_valuations[clock_name] = ((ClockValuation) zone.lower_bound_) + time_delta;
 				} else {
 					plant_configuration.clock_valuations[clock_name] = (ClockValuation) zone.lower_bound_;
 				}
@@ -318,7 +320,7 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 
 				if(zone.lower_isOpen_) //Check if we can have an integer or not
 				{
-					ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_zone_state.location, ((ClockValuation) zone.lower_bound_) + time_delta * static_cast<Time>((i + 1))});
+					ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_zone_state.location, ((ClockValuation) zone.lower_bound_) + time_delta});
 				} else {
 					ata_configuration.insert(ATAState<ConstraintSymbolType>{ata_zone_state.location, (ClockValuation) zone.lower_bound_});
 				}
@@ -350,6 +352,7 @@ get_nth_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &wo
 template <typename Location, typename ConstraintSymbolType>
 std::vector<std::pair<RegionIndex, CanonicalABWord<Location, ConstraintSymbolType>>>
 get_time_successors(const CanonicalABWord<Location, ConstraintSymbolType> &canonical_word,
+					
 					RegionIndex                                            K)
 {
 	//TODO: Compute cur_index differently for zones to allow for taking more than one time step at once

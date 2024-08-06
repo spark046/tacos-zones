@@ -200,6 +200,14 @@ public:
 	std::set<Configuration<LocationT>> make_symbol_step(const Configuration<LocationT> &start_states,
 	                                                    const SymbolT                  &symbol) const;
 
+	/** Compute the resulting configurations and all constraints after making a symbol step.
+	 * @param start_states The starting configuration
+	 * @param symbol The symbol to read
+	 * @return A pair consisting of the configurations after making the symbol step and a set of clock constraints
+	 */
+	std::pair<std::set<Configuration<LocationT>>, std::set<ClockConstraint>> make_symbol_step_with_constraints(const Configuration<LocationT> &start_states,
+	                                                    const SymbolT                  &symbol) const;
+
 	/** Compute the resulting run after reading a symbol.
 	 * @param runs The valid runs resulting from reading previous symbols
 	 * @param symbol The symbol to read

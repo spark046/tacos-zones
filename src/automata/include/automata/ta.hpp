@@ -182,7 +182,15 @@ std::set<TAConfiguration<LocationT>>
 TimedAutomaton<LocationT, AP>::make_symbol_step(const TAConfiguration<LocationT> &configuration,
                                                 const AP                         &symbol) const
 {
-	std::set<TAConfiguration<LocationT>> res;
+	return make_symbol_step_with_constraints(configuration, symbol).first;
+}
+
+template <typename LocationT, typename AP>
+std::pair<std::set<TAConfiguration<LocationT>>, std::multimap<std::string, ClockConstraint>>
+TimedAutomaton<LocationT, AP>::make_symbol_step_with_constraints(const TAConfiguration<LocationT> &configuration,
+                                                const AP                         &symbol) const
+{
+	std::pair<std::set<TAConfiguration<LocationT>>, std::multimap<std::string, ClockConstraint>> res;
 	// TODO This may cause an issue if the transitions are not sorted as expected, because
 	// equal_range returns a sub-sequence
 	auto [first, last] = transitions_.equal_range(configuration.location);
@@ -198,7 +206,11 @@ TimedAutomaton<LocationT, AP>::make_symbol_step(const TAConfiguration<LocationT>
 		for (const auto &name : trans->second.clock_resets_) {
 			next_clocks[name].reset();
 		}
-		res.insert(TAConfiguration<LocationT>{trans->second.target_, next_clocks});
+		res.first.insert(TAConfiguration<LocationT>{trans->second.target_, next_clocks});
+
+		std::multimap<std::string, automata::ClockConstraint> transition_guards = trans->second.clock_constraints_;
+
+		res.second.insert(transition_guards.begin(), transition_guards.end());
 	}
 	return res;
 }

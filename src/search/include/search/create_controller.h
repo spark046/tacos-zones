@@ -95,6 +95,7 @@ get_constraints_from_outgoing_action(
 				if (first_good_increment == increment) {
 					// They are the same, create both constraints at the same time to obtain a = constraint
 					// for even regions. constraints.merge(
+					//TODO: get_nth_time_successor should get n sets of clock constraints to simulate taking n steps (so Zone Delays can be restricted)
 					constraints.merge(get_constraints_from_time_successor(
 					  search::get_nth_time_successor(node_reg_a, *first_good_increment, K),
 					  K,

@@ -159,9 +159,20 @@ AlternatingTimedAutomaton<LocationT, SymbolT>::make_symbol_step(
   const Configuration<LocationT> &start_states,
   const SymbolT                  &symbol) const
 {
+	return make_symbol_step_with_constraints(start_states, symbol).first;
+}
+
+template <typename LocationT, typename SymbolT>
+std::pair<std::set<Configuration<LocationT>>, std::set<ClockConstraint>>
+AlternatingTimedAutomaton<LocationT, SymbolT>::make_symbol_step_with_constraints(
+  const Configuration<LocationT> &start_states,
+  const SymbolT                  &symbol) const
+{
 	// A vector of a set of target configurations that are reached when following a transition.
 	// One entry for each start state
 	std::vector<std::set<Configuration<LocationT>>> models;
+
+	std::set<ClockConstraint> clock_constraints;
 	// If the start states are empty, we know that the empty set of states is
 	// a minimal model of the last transition step.
 	if (start_states.empty()) {
@@ -176,6 +187,10 @@ AlternatingTimedAutomaton<LocationT, SymbolT>::make_symbol_step(
 		}
 		const auto new_states = get_minimal_models(t->formula_.get(), state.clock_valuation);
 		models.push_back(new_states);
+
+		std::set<automata::ClockConstraint> clock_constraints = t->formula_->get_clock_constraints();
+
+		clock_constraints.insert(clock_constraints.begin(), clock_constraints.end());
 	}
 	// We were not able to make any transition.
 	if (models.empty() || std::any_of(std::begin(models), std::end(models), [](const auto &model) {
@@ -183,10 +198,10 @@ AlternatingTimedAutomaton<LocationT, SymbolT>::make_symbol_step(
 	    })) {
 		// We have a sink location, the next configuration is the singleton {(sink, 0)}.
 		if (sink_location_.has_value()) {
-			return {{State<LocationT>{sink_location_.value(), 0}}};
+			return std::make_pair<std::set<Configuration<LocationT>>, std::set<ClockConstraint>>({{State<LocationT>{sink_location_.value(), 0}}}, {});
 		} else {
 			// No sink location, return the empty set. The ATA is incomplete.
-			return {};
+			return std::make_pair<std::set<Configuration<LocationT>>, std::set<ClockConstraint>>({}, {});
 		}
 	}
 	// The resulting configurations after computing the cartesian product of all target
@@ -215,7 +230,7 @@ AlternatingTimedAutomaton<LocationT, SymbolT>::make_symbol_step(
 	// If we get here and the configurations are empty, something went wrong. If there is a transition
 	// without model, this should have been caught earlier.
 	assert(!configurations.empty());
-	return configurations;
+	return std::make_pair<std::set<Configuration<LocationT>>, std::set<ClockConstraint>>(std::move(configurations), std::move(clock_constraints));
 }
 
 template <typename LocationT, typename SymbolT>

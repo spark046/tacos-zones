@@ -78,11 +78,21 @@ public:
 		  successors;
 		for (const auto &symbol : ta.get_alphabet()) {
 			SPDLOG_TRACE("({}, {}): Symbol {}", ab_configuration.first, ab_configuration.second, symbol);
+
+			const std::pair<std::set<typename automata::ta::TimedAutomaton<LocationT, ActionType>::Configuration>,
+							std::multimap<std::string, automata::ClockConstraint>>
+				ta_transitions = ta.make_symbol_step_with_constraints(ab_configuration.first, symbol);
+
 			const std::set<typename automata::ta::TimedAutomaton<LocationT, ActionType>::Configuration>
-			  ta_successors = ta.make_symbol_step(ab_configuration.first, symbol);
+				ta_successors = ta_transitions.first;
+
+			std::pair<std::set<ATAConfiguration<ConstraintSymbolType>>, std::set<automata::ClockConstraint>>
+				ata_transitions;
+
 			std::set<ATAConfiguration<ConstraintSymbolType>> ata_successors;
 			if constexpr (!use_location_constraints) {
-				ata_successors = ata.make_symbol_step(ab_configuration.second, symbol);
+				ata_transitions = ata.make_symbol_step_with_constraints(ab_configuration.second, symbol);
+				ata_successors = ata_transitions.first;
 			}
 			SPDLOG_TRACE("({}, {}): TA successors: {} ATA successors: {}",
 			             ab_configuration.first,
@@ -95,9 +105,11 @@ public:
 				             ab_configuration.second,
 				             ta_successor);
 				if constexpr (use_location_constraints) {
-					ata_successors = ata.make_symbol_step(ab_configuration.second,
+					ata_transitions = ata.make_symbol_step_with_constraints(ab_configuration.second,
 					                                      logic::AtomicProposition{ta_successor.location});
+					ata_successors = ata_transitions.first;
 				}
+
 				for (const auto &ata_successor : ata_successors) {
 					SPDLOG_TRACE("({}, {}): ATA successor {}",
 					             ab_configuration.first,
@@ -106,9 +118,8 @@ public:
 
 					std::multimap<std::string, automata::ClockConstraint> constraints = {};
 					if(use_zones) {
-						//TODO: Get Clock constraints of symbol steps
-						constraints = ta.get_clock_constraints();
-						std::set<automata::ClockConstraint> ata_constraints = ata.get_clock_constraints();
+						constraints = ta_transitions.second;
+						std::set<automata::ClockConstraint> ata_constraints = ata_transitions.second;
 
 						for(auto iter1 = ata_constraints.begin(); iter1 != ata_constraints.end(); iter1++) {
 							constraints.insert( {"", *iter1} );
