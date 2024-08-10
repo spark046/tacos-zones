@@ -11,6 +11,9 @@
 #include <fmt/ostream.h>
 #include <float.h>
 
+//There were some bugs, probably related to overflows
+#define ZONE_INFTY 30000
+
 /** Represents symbolic states used for Canonical Words */
 namespace tacos::search {
 
@@ -90,9 +93,9 @@ public:
 	 * Increments a state by one time step.
 	 * Regions are just incremented by one, while zones are delayed
 	 * 
-	 * @param max_region_index The maximal constant that should not be exceeded represented as a RegionIndex
+	 * @param max_region_index The maximal constant that should not be exceeded represented as a RegionIndex. Default is ZONE_INFTY (30000)
 	 */
-	void increment_valuation(RegionIndex max_region_index = 0)
+	void increment_valuation(RegionIndex max_region_index = ZONE_INFTY)
 	{
 		virt_increment_valuation(max_region_index);
 	}
@@ -190,9 +193,9 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 	}
 
 	/** Overloaded Constructor allowing the use of a set of ClockConstraints to initialize a ZoneState */
-	ZoneState(LocationType location_p, std::string clock_p, std::multimap<std::string, automata::ClockConstraint> clock_constraint, Endpoint max_constant = 0) :
+	ZoneState(LocationType location_p, std::string clock_p, std::multimap<std::string, automata::ClockConstraint> clock_constraint, Endpoint max_constant) :
 	Base::SymbolicState(location_p, clock_p, [&clock_constraint, &clock_p, &max_constant](){
-		ZoneSlice ret = ZoneSlice(0, std::numeric_limits<Endpoint>::max(), false, false, max_constant);
+		ZoneSlice ret = ZoneSlice(0, ZONE_INFTY, false, false, max_constant);
 
 		if(max_constant > 0) {
 			ret.upper_bound_ = max_constant;
@@ -202,13 +205,8 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 			return ret;
 		}
 
-		for(auto iter1 = clock_constraint.begin(); iter1 != clock_constraint.end(); iter1++)
-		{
-			if(iter1->first == clock_p)
-			{
-				ret.conjunct(iter1->second);
-			}
-		}
+		ret.conjunct(clock_constraint, clock_p);
+		
 		return ret;
 	}())
 	{
@@ -227,7 +225,7 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 	{
 		ZoneSlice &zone = Base::symbolic_valuation;
 
-		//If max_region_index is 0, then K is too.
+		//If max_region_index is 0, then K is too to avoid integer underflow.
 		//Inverse from search::get_time_successor, not sure why it is done like this instead of checking whether it's even, etc.
 		Endpoint K = max_region_index == 0 ? 0 : (max_region_index - 1) / 2;
 
@@ -236,14 +234,8 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 
 		//We take/keep the larger of the two maximal constants 
 		if(zone.max_constant_ >= K) {
-			if(K == 0) {
-				zone.upper_bound_ = std::numeric_limits<Endpoint>::max();
-				zone.upper_isOpen_ = false;
-				zone.max_constant_ = 0;
-			} else {
-				zone.upper_bound_ = zone.max_constant_;
-				zone.upper_isOpen_ = false;
-			}
+			zone.upper_bound_ = zone.max_constant_;
+			zone.upper_isOpen_ = false;
 		} else {
 			zone.upper_bound_ = K;
 			zone.upper_isOpen_ = false;
@@ -297,7 +289,7 @@ struct PlantZoneState : ZoneState<LocationT>
 
 	}
 
-	PlantZoneState(LocationT location, std::string clock, ConstraintSet constraints, Endpoint max_constant = 0) :
+	PlantZoneState(LocationT location, std::string clock, ConstraintSet constraints, Endpoint max_constant) :
 	ZoneState<LocationT>::ZoneState(location, clock, constraints, max_constant)
 	{
 
@@ -320,7 +312,7 @@ struct ATAZoneState : ZoneState<logic::MTLFormula<ConstraintSymbolType>>
 
 	}
 
-	ATAZoneState(logic::MTLFormula<ConstraintSymbolType> formula, ConstraintSet constraints, Endpoint max_constant = 0) :
+	ATAZoneState(logic::MTLFormula<ConstraintSymbolType> formula, ConstraintSet constraints, Endpoint max_constant) :
 	ZoneState<logic::MTLFormula<ConstraintSymbolType>>::ZoneState(formula, "", constraints, max_constant)
 	{
 

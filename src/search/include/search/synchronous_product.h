@@ -99,30 +99,22 @@ increment_zones(
 	std::set<ABRegionSymbol<Location, ConstraintSymbolType>> res;
 	//Max Constant
 	RegionIndex K = (max_region_index - 1) / 2; //Inverse from get_time_successor, not sure why it is done like this
-	
-	//TODO: Temp, delete
-	std::multimap<std::string, automata::ClockConstraint> clock_constraints;
 
 	std::transform( configurations.begin(),
 					configurations.end(),
 					std::inserter(res, res.end()),
-					[K, clock_constraints](auto configuration) {
+					[K](auto configuration) {
 						if (std::holds_alternative<PlantZoneState<Location>>(configuration)) {
 							auto &state = std::get<PlantZoneState<Location>>(configuration);
 
 							//TODO: Somehow know the transition to take and only get a subset of these Clock Constraints (Possible? Even Necessary? Hopefully not...)
 							//TODO: Get transitions from automata
-							//Get the clock constraints from all transitions out of this state to restrict the delay
 
 							state.increment_valuation(K);
-
-							state.symbolic_valuation.conjunct(clock_constraints, state.clock);
 						} else { //ATAZoneState
 							auto &state = std::get<ATAZoneState<ConstraintSymbolType>>(configuration);
 
 							state.increment_valuation(K);
-
-							state.symbolic_valuation.conjunct(clock_constraints, "");
 						}
 
 						return configuration;
@@ -207,9 +199,6 @@ get_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word, 
 			std::reverse_copy(std::next(last_nonmaxed_partition), word.rend(), std::back_inserter(res));
 		}
 	} else { //Using zones
-		//if the first partition's zone starts at an integer, we can simple make it an open interval
-		//otherwise, the lastnonmaxed partition's upperbound gets incremented by going to the next open interval or next integer.
-
 		const bool first_partition_open = get_zone_slice(*word.begin()->begin(), K).lower_isOpen_;
 		if(!first_partition_open) {
 			auto incremented = increment_zones(*word.begin(), max_region_index);
@@ -258,12 +247,13 @@ get_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word, 
  * @tparam Location The location type for timed automata locations
  * @tparam ConstraintSymbolType The type of actions which encode locations in the ATA
  * @param word The passed canonical word for which a candidate should be generated
+ * @param clock_constraints A set of clock constraints that should be fulfilled by the candidate. Necessary for zones
  * @return std::pair<TAConfiguration<Location>, ATAConfiguration<ConstraintSymbolType>> A pair of
  * TA- and ATA-state which can be represented by the passed canonical word
  */
 template <typename Location /* TA::Location */, typename ConstraintSymbolType>
 std::pair<PlantConfiguration<Location>, ATAConfiguration<ConstraintSymbolType>>
-get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
+get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word, const std::multimap<std::string, automata::ClockConstraint> clock_constraints = {})
 {
 	assert(is_valid_canonical_word(word));
 	PlantConfiguration<Location>           plant_configuration{};
@@ -277,7 +267,7 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 				const auto       &ta_region_state = std::get<PlantRegionState<Location>>(symbol);
 				const RegionIndex region_index    = ta_region_state.symbolic_valuation;
 				const Time        fractional_part =
-		  region_index % 2 == 0 ? 0 : time_delta * static_cast<Time>((i + 1));
+					region_index % 2 == 0 ? 0 : time_delta * static_cast<Time>((i + 1));
 				const Time  integral_part = static_cast<RegionIndex>(region_index / 2);
 				const auto &clock_name    = ta_region_state.clock;
 				// update ta_configuration
@@ -287,7 +277,7 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 				const auto       &ata_region_state = std::get<ATARegionState<ConstraintSymbolType>>(symbol);
 				const RegionIndex region_index     = ata_region_state.symbolic_valuation;
 				const Time        fractional_part =
-		  region_index % 2 == 0 ? 0 : time_delta * static_cast<Time>((i + 1));
+					region_index % 2 == 0 ? 0 : time_delta * static_cast<Time>((i + 1));
 				const Time integral_part = static_cast<RegionIndex>(region_index / 2);
 				// update configuration
 				// TODO check: the formula (aka ConstraintSymbolType) encodes the location, the clock
@@ -298,12 +288,14 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 			} else if(std::holds_alternative<PlantZoneState<Location>>(symbol)) {
 				const auto &ta_zone_state = std::get<PlantZoneState<Location>>(symbol);
 
-				const auto &clock_name = ta_zone_state.clock;
-				const zones::Zone_slice zone = ta_zone_state.symbolic_valuation;
-
-				assert(zone.lower_bound_ <= zone.upper_bound_); //make sure zone is not empty set
-
 				plant_configuration.location = ta_zone_state.location;
+
+				const auto &clock_name = ta_zone_state.clock;
+				zones::Zone_slice zone = ta_zone_state.symbolic_valuation;
+
+				if(!clock_constraints.empty()) {
+					zone.conjunct(clock_constraints, clock_name);
+				}
 
 				if(zone.lower_isOpen_) //Check if we can have an integer or not
 				{
@@ -311,12 +303,13 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 				} else {
 					plant_configuration.clock_valuations[clock_name] = (ClockValuation) zone.lower_bound_;
 				}
-
 			} else { //ATAZoneState
 				const auto &ata_zone_state = std::get<ATAZoneState<ConstraintSymbolType>>(symbol);
-				const zones::Zone_slice zone = ata_zone_state.symbolic_valuation;
+				zones::Zone_slice zone = ata_zone_state.symbolic_valuation;
 
-				assert(zone.lower_bound_ <= zone.upper_bound_); //make sure zone is not empty set
+				if(!clock_constraints.empty()) {
+					zone.conjunct(clock_constraints, "");
+				}
 
 				if(zone.lower_isOpen_) //Check if we can have an integer or not
 				{

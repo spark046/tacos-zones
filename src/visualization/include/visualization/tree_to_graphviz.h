@@ -57,6 +57,16 @@ add_search_node_to_graph(
 					}
 					partition_labels.push_back(
 					  fmt::format("({}, {})", plant_location.clock, plant_location.symbolic_valuation));
+				} else if(std::holds_alternative<tacos::search::PlantZoneState<LocationT>>(symbol)) {
+					const auto plant_location = std::get<tacos::search::PlantZoneState<LocationT>>(symbol);
+					if(program_label.empty()) {
+						std::stringstream s;
+						s << plant_location.location;
+						program_label = s.str();
+					}
+					partition_labels.push_back(
+						fmt::format("({}, {})", plant_location.clock, plant_location.symbolic_valuation)
+					);
 				} else {
 					std::stringstream str;
 					str << symbol;

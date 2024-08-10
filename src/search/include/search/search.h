@@ -258,13 +258,12 @@ public:
 		} else if(use_zones_) {
 			//TODO: Add zone support for location constraints and set semantics
 
-			std::multimap<std::string, automata::ClockConstraint> clock_constraints = ta->get_clock_constraints();
-			std::set<automata::ClockConstraint> ata_constraints = ata->get_clock_constraints();
+			std::multimap<std::string, automata::ClockConstraint> clock_constraints;
 
-			for(auto iter1 = ata_constraints.begin(); iter1 != ata_constraints.end(); iter1++)
-			{
-				clock_constraints.insert( {"", *iter1} );
+			for(auto clock = ta->get_clocks().begin(); clock != ta->get_clocks().end(); clock++) {
+				clock_constraints.insert({*clock, automata::AtomicClockConstraintT<std::equal_to<Time>>(0)});
 			}
+			clock_constraints.insert({"", automata::AtomicClockConstraintT<std::equal_to<Time>>(0)});
 
 			tree_root_ = std::make_shared<Node>(
 			  std::set<CanonicalABWord<typename Plant::Location, ConstraintSymbolType>>{
@@ -472,6 +471,58 @@ public:
 	}
 
 private:
+
+	/**
+	 * Get the clock constraints from the transitions of the TA, that can be used from this specific canonical word.
+	 * I.e. Location and Symbolic Valuations are checked.
+	 * 
+	 * @param ta The TA Transition System
+	 * @param word CanonicalABWord from which the transitions go out from
+	 * 
+	 * @return A multimap of clock constraints with key/value (clock name, clock constraint)
+	 */
+	std::multimap<std::string, automata::ClockConstraint>
+	get_transition_clock_constraints(const CanonicalABWord<Location, ConstraintSymbolType> &word)
+	{
+		std::multimap<std::string, automata::ClockConstraint> ret;
+
+		const auto &transitions = ta_->get_transitions();
+
+		auto ta_word = reg_a(word);
+
+		for(const auto &partition : word) {
+			for (const auto &ab_symbol : partition) {
+				if (std::holds_alternative<PlantRegionState<Location>>(ab_symbol)) {
+					const auto &ta_state = std::get<PlantRegionState<Location>>(ab_symbol);
+
+					auto [curr, last] = transitions.equal_range(ta_state.location);
+					for(;curr != last; curr++) {
+						std::multimap<std::string, automata::ClockConstraint> clock_constraints = curr->second.get_guards();
+						for(auto iter1 = clock_constraints.begin(); iter1 != clock_constraints.end(); iter1++) {
+							if(automata::is_satisfied(iter1->second, (Time) ta_state.symbolic_valuation)) {
+								ret.insert(curr->second.get_guards().begin(), curr->second.get_guards().end());
+							}
+						}
+					}
+				} else if(std::holds_alternative<PlantZoneState<Location>>(ab_symbol)) {
+					const auto &ta_state = std::get<PlantZoneState<Location>>(ab_symbol);
+
+					auto [curr, last] = transitions.equal_range(ta_state.location);
+					for(;curr != last; curr++) {
+						std::multimap<std::string, automata::ClockConstraint> clock_constraints = curr->second.get_guards();
+						for(auto iter1 = clock_constraints.begin(); iter1 != clock_constraints.end(); iter1++) {
+							if(ta_state.symbolic_valuation.fulfills_constraints(iter1->second)) {
+								ret.insert(curr->second.get_guards().begin(), curr->second.get_guards().end());
+							}
+						}
+					}
+				}
+			}
+		}
+
+		return ret;
+	}
+
 	std::pair<std::set<Node *>, std::set<Node *>>
 	compute_children(Node *node)
 	{
@@ -486,13 +537,16 @@ private:
 		const auto time_successors = get_time_successors(node->words, K_);
 		for (std::size_t increment = 0; increment < time_successors.size(); ++increment) {
 			for (const auto &time_successor : time_successors[increment]) {
+				std::multimap<std::string, automata::ClockConstraint> clockity_constraintsy =
+					get_transition_clock_constraints(time_successor);
+
 				auto successors =
 				  get_next_canonical_words<Plant,
 				                           ActionType,
 				                           ConstraintSymbolType,
 				                           use_location_constraints,
 				                           use_set_semantics>(controller_actions_, environment_actions_)(
-				    *ta_, *ata_, get_candidate(time_successor), increment, K_, use_zones_);
+				    *ta_, *ata_, get_candidate(time_successor, clockity_constraintsy), increment, K_, use_zones_);
 				for (const auto &[symbol, successor] : successors) {
 					assert(
 					  std::find(std::begin(controller_actions_), std::end(controller_actions_), symbol)

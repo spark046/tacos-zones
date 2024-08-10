@@ -267,7 +267,7 @@ TimedAutomaton<LocationT, AP>::accepts_word(const TimedWord &word) const
 template <typename LocationT, typename AP>
 std::vector<Transition<LocationT, AP>>
 TimedAutomaton<LocationT, AP>::get_enabled_transitions(
-  const TAConfiguration<LocationT> &configuration)
+  const TAConfiguration<LocationT> &configuration) const
 {
 	std::vector<Transition> res;
 	for (const auto &symbol : alphabet_) {

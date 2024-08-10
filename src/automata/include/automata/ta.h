@@ -368,7 +368,7 @@ public:
 	 * 
 	 * @return A multimap with entries (clock name, clock constraint)
 	 */
-	const std::multimap<std::string, ClockConstraint>
+	std::multimap<std::string, ClockConstraint>
 	get_clock_constraints() const
 	{
 		std::multimap<std::string, ClockConstraint> ret;
@@ -376,6 +376,26 @@ public:
 		for(auto iter1 = transitions_.begin(); iter1 != transitions_.end(); iter1++)
 		{
 			ret.insert(iter1->second.get_guards().begin(), iter1->second.get_guards().end());
+		}
+
+		return ret;
+	}
+
+	/**
+	 * Get all the clock constraints of all the transitions that go from one specific configuration
+	 * 
+	 * @return A multimap with entries (clock name, clock constraint)
+	 */
+	std::multimap<std::string, ClockConstraint>
+	get_clock_constraints(const TAConfiguration<LocationT> &configuration) const
+	{
+		std::multimap<std::string, ClockConstraint> ret;
+
+		auto transitions = this->get_enabled_transitions(configuration);
+
+		for(auto iter1 = transitions.begin(); iter1 != transitions.end(); iter1++)
+		{
+			ret.insert(iter1->get_guards().begin(), iter1->get_guards().end());
 		}
 
 		return ret;
@@ -465,7 +485,7 @@ public:
 	bool accepts_word(const TimedWord &word) const;
 
 	/// Get the enabled transitions in a given configuration.
-	std::vector<Transition> get_enabled_transitions(const TAConfiguration<LocationT> &configuration);
+	std::vector<Transition> get_enabled_transitions(const TAConfiguration<LocationT> &configuration) const;
 
 	/**
 	 * @brief Get the largest constant any clock is compared to.

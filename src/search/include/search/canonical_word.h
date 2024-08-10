@@ -69,19 +69,11 @@ get_region_index(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
 	} else if(std::holds_alternative<PlantZoneState<Location>>(w)) {
 		zones::Zone_slice zone = std::get<PlantZoneState<Location>>(w).symbolic_valuation;
 
-		if(zone.lower_isOpen_) {
-			return (zone.upper_bound_ * 2) - 1;
-		} else {
-			return zone.upper_bound_ * 2;
-		}
+		return 2 * zone.upper_bound_ + 1; //same definition as in search::get_time_successor
 	} else { //ATAZoneState
 		zones::Zone_slice zone = std::get<ATAZoneState<ConstraintSymbolType>>(w).symbolic_valuation;
 
-		if(zone.lower_isOpen_) {
-			return (zone.upper_bound_ * 2) - 1;
-		} else {
-			return zone.upper_bound_ * 2;
-		}
+		return 2 * zone.upper_bound_ + 1; //same definition as in search::get_time_successor
 	}
 }
 
@@ -94,7 +86,7 @@ get_region_index(const ABRegionSymbol<Location, ConstraintSymbolType> &w)
  */
 template <typename Location, typename ConstraintSymbolType>
 zones::Zone_slice
-get_zone_slice(const ABRegionSymbol<Location, ConstraintSymbolType> &w, RegionIndex max_region_index = 0)
+get_zone_slice(const ABRegionSymbol<Location, ConstraintSymbolType> &w, RegionIndex max_region_index)
 {
 	if (std::holds_alternative<PlantRegionState<Location>>(w)) {
 		RegionIndex i = std::get<PlantRegionState<Location>>(w).symbolic_valuation;
@@ -257,22 +249,22 @@ is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &w
 			K = (max_region + 1) / 2;
 		}
 
-		std::for_each(word.begin(), word.end(), [&word](const auto &configurations) {
+		std::for_each(word.begin(), word.end(), [&word, max_region](const auto &configurations) {
 			if (std::any_of(configurations.begin(),
 			                configurations.end(),
-			                [](const auto &w) { return !zones::is_valid_zone(get_zone_slice(w)); })
+			                [max_region](const auto &w) { return !zones::is_valid_zone(get_zone_slice(w, max_region)); })
 				) {
 				throw InvalidCanonicalWordException(word, "word contains configuration with an invalid zone");
 			}
 		});
 
-		std::for_each(word.begin(), word.end(), [&word, K](const auto &configurations) {
+		std::for_each(word.begin(), word.end(), [&word, K, max_region](const auto &configurations) {
 			if (std::any_of(configurations.begin(),
 			                configurations.end(),
-			                [K](const auto &w) { return(get_zone_slice(w).lower_bound_ > K ||
-														get_zone_slice(w).upper_bound_ > K ||
-														get_zone_slice(w).max_constant_ > K) &&
-														K != 0; })
+			                [K, max_region](const auto &w) { return(get_zone_slice(w, max_region).lower_bound_ > K ||
+																	get_zone_slice(w, max_region).upper_bound_ > K ||
+																	get_zone_slice(w, max_region).max_constant_ > K) &&
+																	K != 0; })
 				) {
 				throw InvalidCanonicalWordException(word, "word contains configuration with a zone that has bounds exceeding the max region");
 			}

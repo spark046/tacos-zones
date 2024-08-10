@@ -270,6 +270,28 @@ public:
 		return ret;
 	}
 
+	/**
+	 * Get a multimap of all clock constraints from a specific configuration
+	 */
+	std::set<automata::ClockConstraint>
+	get_clock_constraints(const Configuration<LocationT> &configuration) const
+	{
+		std::set<automata::ClockConstraint> ret = {};
+
+		//TODO: Double for Loop. Can this be more efficient?
+		for(auto iter1 = transitions_.begin(); iter1 != transitions_.end(); iter1++)
+		{
+			if(std::any_of(configuration.begin(), configuration.end(), [&iter1](const auto &state) {
+				return state.location == iter1->source_;
+			})) {
+				std::set<automata::ClockConstraint> curr_set = iter1->get_clock_constraints();
+				ret.insert(curr_set.begin(), curr_set.end());
+			}
+		}
+
+		return ret;
+	}
+
 private:
 	std::set<std::set<State<LocationT>>> get_minimal_models(Formula<LocationT> *formula,
 	                                                        ClockValuation      v) const;

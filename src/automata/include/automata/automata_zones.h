@@ -37,27 +37,27 @@
 		Endpoint max_constant_;
 
 		/** Constructor for Zone slice. If upper_bound is larger than the max_constant, it is set back to the max_constant */
-		Zone_slice(Endpoint lower_bound, Endpoint upper_bound, bool lower_isStrict, bool upper_isStrict, Endpoint max_constant = 0) :
+		Zone_slice(Endpoint lower_bound, Endpoint upper_bound, bool lower_isStrict, bool upper_isStrict, Endpoint max_constant) :
 			lower_bound_(lower_bound), 
 			upper_bound_(upper_bound), 
 			lower_isOpen_(lower_isStrict), 
 			upper_isOpen_(upper_isStrict),
 			max_constant_(max_constant)
 		{
-			if(upper_bound_ > max_constant_ && max_constant_ > 0) {
+			if(upper_bound_ > max_constant_) {
 				upper_bound_ = max_constant_;
 				upper_isOpen_ = false;
 			}
 		}
 
 		/** Construct using a ClockConstraint, the actual definition of a zone */
-		Zone_slice(automata::ClockConstraint clock_constraint, Endpoint max_constant = 0)
+		Zone_slice(automata::ClockConstraint clock_constraint, Endpoint max_constant)
 		{
 			Endpoint constant = std::visit([](const auto &atomic_clock_constraint)
 						  -> Time { return atomic_clock_constraint.get_comparand(); },
 						  clock_constraint); //Visit due to ClockConstraint being a variant
 
-			assert(constant <= max_constant || max_constant == 0);
+			max_constant_ = max_constant;
 
 			std::optional<int> relation_opt = automata::get_relation_index(clock_constraint);
 			assert(relation_opt.has_value());
@@ -85,13 +85,13 @@
 				break;
 			case 4: //greater_equal
 				lower_bound_ = constant;
-				upper_bound_ = std::numeric_limits<Endpoint>::max();
+				upper_bound_ = max_constant_;
 				lower_isOpen_ = false;
 				upper_isOpen_ = false;
 				break;
 			case 5: //greater
 				lower_bound_ = constant;
-				upper_bound_ = std::numeric_limits<Endpoint>::max();
+				upper_bound_ = max_constant_;
 				lower_isOpen_ = true;
 				upper_isOpen_ = false;
 				break;
@@ -100,45 +100,79 @@
 				break;
 			}
 
-			if(upper_bound_ > max_constant_ && max_constant_ > 0) {
+			if(upper_bound_ > max_constant_) {
 				upper_bound_ = max_constant_;
 				upper_isOpen_ = false;
+			}
+
+			if(lower_bound_ > max_constant_) {
+				lower_bound_ = max_constant_;
+				lower_isOpen_ = true;
 			}
 		}
 
 		/**
 		 * Create a Zone_slice using multiple constraints (i.e. in a conjunction) for a specific clock.
 		 */
-		Zone_slice(const std::multimap<std::string, automata::ClockConstraint> constraints, std::string clock, Endpoint max_constant = 0)
+		Zone_slice(const std::multimap<std::string, automata::ClockConstraint> constraints, std::string clock, Endpoint max_constant)
 		{
 			lower_bound_ = 0;
-			upper_bound_ = std::numeric_limits<Endpoint>::max();
+			upper_bound_ = max_constant;
 			lower_isOpen_ = false;
 			upper_isOpen_ = false;
 			max_constant_ = max_constant;
 
-			//Go through all constraints and conjunct the ones which match to the clock
-			for(auto constraint = constraints.begin(); constraint != constraints.end(); constraint++)
-			{
-				if(constraint->first == clock)
-				{
-					this->conjunct(constraint->second);
-				}
+			if(!constraints.empty()) {
+				this->conjunct(constraints, clock);
 			}
 
-			if(upper_bound_ > max_constant_ && max_constant_ > 0) {
+			if(upper_bound_ > max_constant_) {
 				upper_bound_ = max_constant_;
 				upper_isOpen_ = false;
 			}
 		}
 
 		/** Returns true if a valuation is in this zone, otherwise returns false */
-		bool is_in_zone(ClockValuation valuation)
+		bool is_in_zone(ClockValuation valuation) const
 		{
 			return
 				(valuation == (ClockValuation) lower_bound_ && !lower_isOpen_) ||
 				(valuation == (ClockValuation) upper_bound_ && !upper_isOpen_) ||
 				(valuation >  (ClockValuation) lower_bound_ && (valuation < (ClockValuation) upper_bound_ || upper_bound_ >= max_constant_));
+		}
+
+		/** Returns true if this zone fulfills the ClockConstraint */
+		bool fulfills_constraints(automata::ClockConstraint clock_constraint) const
+		{
+			Endpoint constant = std::visit([](const auto &atomic_clock_constraint)
+						  -> Time { return atomic_clock_constraint.get_comparand(); },
+						  clock_constraint); //Visit due to ClockConstraint being a variant
+
+			std::optional<int> relation_opt = automata::get_relation_index(clock_constraint);
+			assert(relation_opt.has_value());
+			int relation = relation_opt.value();			
+
+			switch (relation)
+			{
+			case 0: //less
+				return (lower_bound_ < constant && (upper_bound_ < constant || (upper_bound_ == constant && upper_isOpen_)));
+			case 1: //less_equal
+				return (lower_bound_ <  constant ||
+					  (lower_bound_ == constant && !lower_isOpen_)) &&
+					   (upper_bound_ <= constant);
+			case 2: //equal_to
+				return lower_bound_ == constant && upper_bound_ == constant;
+			case 4: //greater_equal
+				return (upper_bound_ >  constant ||
+					  (upper_bound_ == constant && !upper_isOpen_)) &&
+					  lower_bound_ >= constant;
+			case 5: //greater
+				return upper_bound_ > constant && (lower_bound_ > constant || (lower_bound_ == constant && lower_isOpen_));
+			default: //not_equal or other oopsie (We assume inequality constraints don't exist for zones)
+				assert(false);
+			}
+
+			return false;
 		}
 
 		/**
@@ -160,7 +194,12 @@
 		 * @param constraints Multimap of clock constraints that are conjuncted with this zone
 		 * @param clock Name of the clock from which the clock constraints should be taken from
 		 */
-		void conjunct(std::multimap<std::string, automata::ClockConstraint> constraints, std::string clock) {
+		void conjunct(std::multimap<std::string, automata::ClockConstraint> constraints, std::string clock)
+		{
+			if(constraints.empty()) {
+				return;
+			}
+
 			for(auto iter1 = constraints.begin(); iter1 != constraints.end(); iter1++) {
 				if(iter1->first == clock) {
 					this->conjunct(iter1->second);
@@ -190,7 +229,7 @@
 				upper_isOpen_ = zone2.upper_isOpen_ || upper_isOpen_;
 			}
 
-			if(max_constant_ > zone2.max_constant_ && zone2.max_constant_ > 0) {
+			if(max_constant_ > zone2.max_constant_) {
 				max_constant_ = zone2.max_constant_;
 			}
 		}
@@ -255,6 +294,7 @@
 	 */
 	std::vector<automata::ClockConstraint> 
 	get_clock_constraints_from_zone(const Zone_slice &zone, RegionIndex max_region_index);
+
 } //namespace tacos::zones
 
 namespace fmt {
