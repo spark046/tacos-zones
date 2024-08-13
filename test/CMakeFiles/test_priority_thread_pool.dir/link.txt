@@ -1,0 +1,1 @@
+/usr/bin/c++ -g CMakeFiles/test_priority_thread_pool.dir/test_priority_thread_pool.cpp.o -o test_priority_thread_pool  -Wl,-rpath,/home/spark046/Documents/Git/tacos-zones/src/automata ../_deps/catch2-build/src/libCatch2Maind.a ../src/automata/libautomata.so -ltinyxml2 -lpthread -lfmt /usr/lib64/libfmt.so.10.2.1 ../_deps/catch2-build/src/libCatch2d.a 

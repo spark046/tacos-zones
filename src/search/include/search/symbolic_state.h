@@ -225,6 +225,11 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 	{
 		ZoneSlice &zone = Base::symbolic_valuation;
 
+		//Empty Zones don't get incremented
+		if(zone.is_empty()) {
+			return;
+		}
+
 		//If max_region_index is 0, then K is too to avoid integer underflow.
 		//Inverse from search::get_time_successor, not sure why it is done like this instead of checking whether it's even, etc.
 		Endpoint K = max_region_index == 0 ? 0 : (max_region_index - 1) / 2;

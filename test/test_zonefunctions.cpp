@@ -27,6 +27,7 @@
 #include "search/ta_adapter.h"
 #include "visualization/ta_to_graphviz.h"
 #include "visualization/tree_to_graphviz.h"
+#include "visualization/interactive_tree_to_graphviz.h"
 
 #include <catch2/benchmark/catch_benchmark.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -430,7 +431,7 @@ TEST_CASE("Debug Railroad example using zones", "[zones]") {
 	using Location = automata::ta::Location<std::vector<std::string>>;
 	using TimedAutomaton = automata::ta::TimedAutomaton<std::vector<std::string>, std::string>;
 
-	using TAConfiguration = PlantConfiguration<Location>;
+	//using TAConfiguration = PlantConfiguration<Location>;
 
 	//using PlantState = search::PlantState<Location>;
 	//using ATAState = search::ATAState<std::string>;
@@ -488,38 +489,45 @@ TEST_CASE("Debug Railroad example using zones", "[zones]") {
 			}
 		}
 	});
-
-	CanonicalABWord next_word = 
-			CanonicalABWord{
-				{PlantZoneState{Location{{"CLOSING", "FAR"}}, "c_1", zone_all},
-				 PlantZoneState{Location{{"CLOSING", "FAR"}}, "t", zone_all},
-				 ATAZoneState{mtl_ata_translation::get_sink<std::string>(), zone_all}}
-			};
-	
-	std::multimap<std::string, automata::ClockConstraint> clock_constraints69 = {{"c_1", c_eq1}, {"t", c_eq2}};
-
-	ClockSetValuation clocks{{"c_1", 1}, {"t", 2}};
-
-	TAConfiguration config{Location{std::vector<std::string>{"CLOSING", "FAR"}}, clocks};
-
-	CHECK(search::get_candidate(next_word, clock_constraints69).first == config);
-
-	const std::pair<std::set<TimedAutomaton::Configuration>,
-					std::multimap<std::string, automata::ClockConstraint>>
-				ta_transitions = plant.make_symbol_step_with_constraints(search::get_candidate(next_word, clock_constraints69).first, "finish_close_1");
-
-	CHECK(ta_transitions.first == ta_transitions.first);
-
-	std::multimap<std::string, CanonicalABWord> next2 = search::get_next_canonical_words<TimedAutomaton, std::string, std::string, false>()(
-		plant, ata, search::get_candidate(next_word, clock_constraints69), 0, 2, true
-	);
-
-	CHECK(next2 == next2);
 }
 
 #if true
 TEST_CASE("Railroad example using zones", "[zones]")
 {
+	using Location [[maybe_unused]] = automata::ta::Location<std::vector<std::string>>;
+	using TimedAutomaton [[maybe_unused]] = automata::ta::TimedAutomaton<std::vector<std::string>, std::string>;
+
+	using TAConfiguration [[maybe_unused]] = PlantConfiguration<Location>;
+
+	using PlantState [[maybe_unused]] = search::PlantState<Location>;
+	using ATAState [[maybe_unused]] = search::ATAState<std::string>;
+	using CanonicalABWord [[maybe_unused]] = search::CanonicalABWord<Location, std::string>;
+	using PlantZoneState [[maybe_unused]] = search::PlantZoneState<Location>;
+	using ATAZoneState [[maybe_unused]] = search::ATAZoneState<std::string>;
+
+	[[maybe_unused]] zones::Zone_slice zone_all{0, 2, false, false, 2};
+	[[maybe_unused]] zones::Zone_slice zone_eq0{0, 0, false, false, 2};
+
+	logic::AtomicProposition<std::string> enter_1{"enter_1"};
+	logic::AtomicProposition<std::string> finish_close_1{"finish_close_1"};
+	logic::AtomicProposition<std::string> finish_open_1{"finish_open_1"};
+	logic::AtomicProposition<std::string> start_open_1{"start_open_1"};
+	logic::AtomicProposition<std::string> leave_1{"leave_1"};
+	logic::AtomicProposition<std::string> travel_1{"travel_1"};
+
+	logic::MTLFormula e{enter_1};
+	logic::MTLFormula f_c{finish_close_1};
+	logic::MTLFormula s_o{start_open_1};
+	logic::MTLFormula l{leave_1};
+	logic::MTLFormula t{travel_1};
+	logic::MTLFormula f_o{finish_open_1};
+
+	logic::MTLFormula phi1 = e.dual_until(!f_c);
+	logic::MTLFormula phi2 = s_o.dual_until(!l);
+	logic::MTLFormula phi3 = t.dual_until(!f_o);
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~START~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
 	const auto &[plant, spec, controller_actions, environment_actions] = create_crossing_problem({2});
 	//const auto   num_crossings                                         = 1;
 	std::set<AP> actions;
@@ -542,11 +550,82 @@ TEST_CASE("Railroad example using zones", "[zones]")
 					  true,
 					  generate_heuristic<TreeSearch::Node>(),
 					  true};
+	
 	search.build_tree(true);
 	CHECK(search.get_root()->label == search::NodeLabel::TOP);
+	
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SANITY CHECKS~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	/* std::multimap<std::string, automata::ClockConstraint> clock_constraints;
+
+	for(auto clock = plant.get_clocks().begin(); clock != plant.get_clocks().end(); clock++) {
+		clock_constraints.insert({*clock, automata::AtomicClockConstraintT<std::equal_to<Time>>(0)});
+	}
+	clock_constraints.insert({"", automata::AtomicClockConstraintT<std::equal_to<Time>>(0)});
+
+	//Check Initial time successor
+	CanonicalABWord initial_word = search::get_canonical_word(plant.get_initial_configuration(),
+										   ata.get_initial_configuration(),
+										   2,
+										   true,
+										   clock_constraints);
+	CHECK(initial_word == *search.get_root()->words.begin());
+
+	CanonicalABWord time_successor1 = search::get_time_successor(initial_word, K);
+	CHECK(time_successor1 == CanonicalABWord{
+			{PlantZoneState{Location{{"OPEN", "FAR"}}, "c_1", zone_all},
+			 PlantZoneState{Location{{"OPEN", "FAR"}}, "t", zone_all},
+			 ATAZoneState{logic::MTLFormula{AP{"l0"}}, zone_all}}
+			});
+
+	//Check all time successors
+	std::set<CanonicalABWord> initial_set{initial_word};
+	std::vector<std::set<CanonicalABWord>> all_time_successors = search::get_time_successors(initial_set, K);
+	std::vector<std::set<CanonicalABWord>> should_be_time_successors{{initial_word}, {time_successor1}};
+
+	CHECK(all_time_successors == should_be_time_successors);
+
+	//Check next canonical word
+	//Initial Word
+	std::multimap<std::string, CanonicalABWord> successors1 = search.compute_next_canonical_words(initial_word);
+	CHECK(successors1 == successors1);
+
+	//time_successor1
+	Location location = get_canonical_word_ta_location(time_successor1);
+	CHECK(location == plant.get_initial_configuration().location);
+
+	std::map<std::string, zones::Zone_slice> new_zones = get_canonical_word_zones(time_successor1);
+	std::map<std::string, zones::Zone_slice> should_be_zones{{"c_1", zone_all}, {"t", zone_all}, {"", zone_all}};
+	CHECK(new_zones == should_be_zones);
+
+	auto [ta_transition, last_transition] = plant.get_transitions().equal_range(location);
+	std::set<PlantZoneState> ta_successors = search.compute_ta_successor("start_close_1", time_successor1, ta_transition->second);
+	std::set<PlantZoneState> should_be_ta_successors{
+								PlantZoneState{Location{{"CLOSING", "FAR"}}, "c_1", zone_eq0},
+								PlantZoneState{Location{{"CLOSING", "FAR"}}, "t", zone_all},
+							};
+	CHECK(ta_successors == should_be_ta_successors);
+
+	std::set<ATAZoneState> ata_successors = search.compute_ata_successor("start_close_1", time_successor1);
+	std::set<ATAZoneState> should_be_ata_successors{
+								ATAZoneState{phi1, zone_all},
+								ATAZoneState{phi2, zone_all},
+								ATAZoneState{phi3, zone_all}
+							};
+	CHECK(ata_successors == should_be_ata_successors);
+
+	std::multimap<std::string, CanonicalABWord> successors2 = search.compute_next_canonical_words(time_successor1);
+	CHECK(successors2 == successors2);
+
+	search.compute_children(search.get_root()); */
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~END~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 	#if true
-	const int num_crossings = 2;
+	[[maybe_unused]] const int num_crossings = 2;
+	//char              tmp_filename[] = "search_graph_XXXXXX.svg";
+	//mkstemps(tmp_filename, 4);
+	//std::filesystem::path tmp_file(tmp_filename);
+	//visualization::search_tree_to_graphviz_interactive(search.get_root(), tmp_filename);
 	visualization::search_tree_to_graphviz(*search.get_root(), true)
 	  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
 	visualization::ta_to_graphviz(controller_synthesis::create_controller(

@@ -253,7 +253,7 @@ get_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word, 
  */
 template <typename Location /* TA::Location */, typename ConstraintSymbolType>
 std::pair<PlantConfiguration<Location>, ATAConfiguration<ConstraintSymbolType>>
-get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word, const std::multimap<std::string, automata::ClockConstraint> clock_constraints = {})
+get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 {
 	assert(is_valid_canonical_word(word));
 	PlantConfiguration<Location>           plant_configuration{};
@@ -293,10 +293,6 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word, const
 				const auto &clock_name = ta_zone_state.clock;
 				zones::Zone_slice zone = ta_zone_state.symbolic_valuation;
 
-				if(!clock_constraints.empty()) {
-					zone.conjunct(clock_constraints, clock_name);
-				}
-
 				if(zone.lower_isOpen_) //Check if we can have an integer or not
 				{
 					plant_configuration.clock_valuations[clock_name] = ((ClockValuation) zone.lower_bound_) + time_delta;
@@ -306,10 +302,6 @@ get_candidate(const CanonicalABWord<Location, ConstraintSymbolType> &word, const
 			} else { //ATAZoneState
 				const auto &ata_zone_state = std::get<ATAZoneState<ConstraintSymbolType>>(symbol);
 				zones::Zone_slice zone = ata_zone_state.symbolic_valuation;
-
-				if(!clock_constraints.empty()) {
-					zone.conjunct(clock_constraints, "");
-				}
 
 				if(zone.lower_isOpen_) //Check if we can have an integer or not
 				{

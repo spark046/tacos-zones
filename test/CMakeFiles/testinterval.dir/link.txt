@@ -1,0 +1,1 @@
+/usr/bin/c++ -g CMakeFiles/testinterval.dir/test_interval.cpp.o -o testinterval  -Wl,-rpath,/home/spark046/Documents/Git/tacos-zones/src/automata ../_deps/catch2-build/src/libCatch2Maind.a ../src/automata/libautomata.so -ltinyxml2 -lpthread /usr/lib64/libfmt.so.10.2.1 -lfmt ../_deps/catch2-build/src/libCatch2d.a 

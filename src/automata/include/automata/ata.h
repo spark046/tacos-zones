@@ -56,6 +56,9 @@ public:
 template <typename LocationT>
 using Configuration = std::set<State<LocationT>>;
 
+template <typename LocationT>
+using ZoneConfiguration = std::set<ZoneState<LocationT>>;
+
 /** A single step in a run of an ATA. */
 template <typename SymbolT>
 using RunStep = std::variant<SymbolT, Time>;
@@ -150,6 +153,27 @@ public:
 		return formula_->get_clock_constraints();
 	}
 
+	/** Gets the symbol to take this transition */
+	SymbolT
+	get_symbol() const {
+		return symbol_;
+	}
+
+	/**
+	 * Calculates a minimal model for this transition from a state w.r.t. the Zone of the state.
+	 * (The location of the state is already implicitly part of this Transition)
+	 * 
+	 * The first minimal model from the set of all minimal models is taken
+	 * 
+	 * @param z The Zone_slice of the state.
+	 * @return A Minimal Model, which consist of a set of ZoneStates, which have a location and Zone_slice => set::(location, Zone)
+	 */
+	ZoneConfiguration<LocationT>
+	get_a_minimal_model(zones::Zone_slice z) const
+	{
+		return *formula_->get_minimal_models(z).begin();
+	}
+
 public:
 	/// The source location of the transition
 	const LocationT source_;
@@ -190,6 +214,18 @@ public:
 	get_alphabet() const
 	{
 		return alphabet_;
+	}
+
+	[[nodiscard]] const std::set<Transition<LocationT, SymbolT>> &
+	get_transitions() const
+	{
+		return transitions_;
+	}
+
+	const std::optional<LocationT> &
+	get_sink_location() const
+	{
+		return sink_location_;
 	}
 
 	/** Compute the resulting configurations after making a symbol step.

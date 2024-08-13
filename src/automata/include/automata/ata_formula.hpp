@@ -35,6 +35,14 @@ operator<<(std::ostream &os, const automata::ata::State<LocationT> &state)
 }
 
 template <typename LocationT>
+std::ostream &
+operator<<(std::ostream &os, const automata::ata::ZoneState<LocationT> &state)
+{
+	os << "(" << state.location << ", " << state.zone << std::string(")");
+	return os;
+}
+
+template <typename LocationT>
 bool
 TrueFormula<LocationT>::is_satisfied(const std::set<State<LocationT>> &,
                                      const ClockValuation &) const
@@ -43,8 +51,23 @@ TrueFormula<LocationT>::is_satisfied(const std::set<State<LocationT>> &,
 }
 
 template <typename LocationT>
+bool
+TrueFormula<LocationT>::is_satisfied(const std::set<ZoneState<LocationT>> &,
+                                     const zones::Zone_slice &) const
+{
+	return true;
+}
+
+template <typename LocationT>
 std::set<std::set<State<LocationT>>>
 TrueFormula<LocationT>::get_minimal_models(const ClockValuation &) const
+{
+	return {{}};
+}
+
+template <typename LocationT>
+std::set<std::set<ZoneState<LocationT>>>
+TrueFormula<LocationT>::get_minimal_models(const zones::Zone_slice &) const
 {
 	return {{}};
 }
@@ -72,8 +95,23 @@ FalseFormula<LocationT>::is_satisfied(const std::set<State<LocationT>> &,
 }
 
 template <typename LocationT>
+bool
+FalseFormula<LocationT>::is_satisfied(const std::set<ZoneState<LocationT>> &,
+                                      const zones::Zone_slice &) const
+{
+	return false;
+}
+
+template <typename LocationT>
 std::set<std::set<State<LocationT>>>
 FalseFormula<LocationT>::get_minimal_models(const ClockValuation &) const
+{
+	return {};
+}
+
+template <typename LocationT>
+std::set<std::set<ZoneState<LocationT>>>
+FalseFormula<LocationT>::get_minimal_models(const zones::Zone_slice &) const
 {
 	return {};
 }
@@ -101,10 +139,34 @@ LocationFormula<LocationT>::is_satisfied(const std::set<State<LocationT>> &state
 }
 
 template <typename LocationT>
+bool
+LocationFormula<LocationT>::is_satisfied(const std::set<ZoneState<LocationT>> &states,
+                                         const zones::Zone_slice              &z) const
+{
+	bool is_contained = false;
+
+	//A location constraint is satisfied, if there is a state with the location, and also such a state's zone contains the zone z
+	for(const auto &state : states) {
+		if(state.location == location_ && state.zone.contains_zone(z)) {
+			is_contained = true;
+			break;
+		}
+	}
+	return is_contained;
+}
+
+template <typename LocationT>
 std::set<std::set<State<LocationT>>>
 LocationFormula<LocationT>::get_minimal_models(const ClockValuation &v) const
 {
 	return {{State<LocationT>{location_, v}}};
+}
+
+template <typename LocationT>
+std::set<std::set<ZoneState<LocationT>>>
+LocationFormula<LocationT>::get_minimal_models(const zones::Zone_slice &z) const
+{
+	return {{ZoneState<LocationT>{location_, z}}};
 }
 
 template <typename LocationT>
@@ -130,10 +192,29 @@ ClockConstraintFormula<LocationT>::is_satisfied(const std::set<State<LocationT>>
 }
 
 template <typename LocationT>
+bool
+ClockConstraintFormula<LocationT>::is_satisfied(const std::set<ZoneState<LocationT>> &,
+                                                const zones::Zone_slice &z) const
+{
+	return zones::is_satisfied(constraint_, z);
+}
+
+template <typename LocationT>
 std::set<std::set<State<LocationT>>>
 ClockConstraintFormula<LocationT>::get_minimal_models(const ClockValuation &v) const
 {
 	if (automata::is_satisfied(constraint_, v)) {
+		return {{}};
+	} else {
+		return {};
+	}
+}
+
+template <typename LocationT>
+std::set<std::set<ZoneState<LocationT>>>
+ClockConstraintFormula<LocationT>::get_minimal_models(const zones::Zone_slice &z) const
+{
+	if (zones::is_satisfied(constraint_, z)) {
 		return {{}};
 	} else {
 		return {};
@@ -163,6 +244,14 @@ ConjunctionFormula<LocationT>::is_satisfied(const std::set<State<LocationT>> &st
 }
 
 template <typename LocationT>
+bool
+ConjunctionFormula<LocationT>::is_satisfied(const std::set<ZoneState<LocationT>> &states,
+                                            const zones::Zone_slice              &z) const
+{
+	return conjunct1_->is_satisfied(states, z) && conjunct2_->is_satisfied(states, z);
+}
+
+template <typename LocationT>
 std::set<std::set<State<LocationT>>>
 ConjunctionFormula<LocationT>::get_minimal_models(const ClockValuation &v) const
 {
@@ -170,6 +259,22 @@ ConjunctionFormula<LocationT>::get_minimal_models(const ClockValuation &v) const
 	auto                                 s2        = conjunct2_->get_minimal_models(v);
 	auto                                 cartesian = ranges::views::cartesian_product(s1, s2);
 	std::set<std::set<State<LocationT>>> res;
+	ranges::for_each(cartesian, [&](const auto &prod) {
+		auto u = std::get<0>(prod);
+		u.insert(std::get<1>(prod).begin(), std::get<1>(prod).end());
+		res.insert(u);
+	});
+	return res;
+}
+
+template <typename LocationT>
+std::set<std::set<ZoneState<LocationT>>>
+ConjunctionFormula<LocationT>::get_minimal_models(const zones::Zone_slice &z) const
+{
+	auto                                 s1        = conjunct1_->get_minimal_models(z);
+	auto                                 s2        = conjunct2_->get_minimal_models(z);
+	auto                                 cartesian = ranges::views::cartesian_product(s1, s2);
+	std::set<std::set<ZoneState<LocationT>>> res;
 	ranges::for_each(cartesian, [&](const auto &prod) {
 		auto u = std::get<0>(prod);
 		u.insert(std::get<1>(prod).begin(), std::get<1>(prod).end());
@@ -208,11 +313,56 @@ DisjunctionFormula<LocationT>::is_satisfied(const std::set<State<LocationT>> &st
 }
 
 template <typename LocationT>
+bool
+DisjunctionFormula<LocationT>::is_satisfied(const std::set<ZoneState<LocationT>> &states,
+                                            const zones::Zone_slice              &z) const
+{
+	return disjunct1_->is_satisfied(states, z) || disjunct2_->is_satisfied(states, z);
+}
+
+template <typename LocationT>
 std::set<std::set<State<LocationT>>>
 DisjunctionFormula<LocationT>::get_minimal_models(const ClockValuation &v) const
 {
 	auto disjunct1_models = disjunct1_->get_minimal_models(v);
 	auto disjunct2_models = disjunct2_->get_minimal_models(v);
+	// Remove each model from disjunct1_models that is a superset of a model in disjunct2_models
+	std::experimental::erase_if(disjunct1_models, [&disjunct2_models](const auto &model1) {
+		return std::find_if(disjunct2_models.begin(),
+		                    disjunct2_models.end(),
+		                    [&model1](const auto &model2) {
+			                    // True if model1 is a superset of model2.
+			                    return std::includes(model1.begin(),
+			                                         model1.end(),
+			                                         model2.begin(),
+			                                         model2.end());
+		                    })
+		       != disjunct2_models.end();
+	});
+	// Add each model from disjunct2_models which is not a superset of a model from disjunct1_models.
+	for (const auto &model2 : disjunct2_models) {
+		if (std::find_if(disjunct1_models.begin(),
+		                 disjunct1_models.end(),
+		                 [&model2](const auto &model1) {
+			                 // True if model2 is a superset of model1.
+			                 return std::includes(model2.begin(),
+			                                      model2.end(),
+			                                      model1.begin(),
+			                                      model1.end());
+		                 })
+		    == disjunct1_models.end()) {
+			disjunct1_models.insert(model2);
+		}
+	}
+	return disjunct1_models;
+}
+
+template <typename LocationT>
+std::set<std::set<ZoneState<LocationT>>>
+DisjunctionFormula<LocationT>::get_minimal_models(const zones::Zone_slice &z) const
+{
+	auto disjunct1_models = disjunct1_->get_minimal_models(z);
+	auto disjunct2_models = disjunct2_->get_minimal_models(z);
 	// Remove each model from disjunct1_models that is a superset of a model in disjunct2_models
 	std::experimental::erase_if(disjunct1_models, [&disjunct2_models](const auto &model1) {
 		return std::find_if(disjunct2_models.begin(),
@@ -274,10 +424,25 @@ ResetClockFormula<LocationT>::is_satisfied(const std::set<State<LocationT>> &sta
 }
 
 template <typename LocationT>
+bool
+ResetClockFormula<LocationT>::is_satisfied(const std::set<ZoneState<LocationT>> &states,
+                                           const zones::Zone_slice &z) const
+{
+	return sub_formula_->is_satisfied(states, zones::Zone_slice{0, 0, false, false, z.max_constant_});
+}
+
+template <typename LocationT>
 std::set<std::set<State<LocationT>>>
 ResetClockFormula<LocationT>::get_minimal_models(const ClockValuation &) const
 {
 	return sub_formula_->get_minimal_models(0);
+}
+
+template <typename LocationT>
+std::set<std::set<ZoneState<LocationT>>>
+ResetClockFormula<LocationT>::get_minimal_models(const zones::Zone_slice &z) const
+{
+	return sub_formula_->get_minimal_models(zones::Zone_slice{0, 0, false, false, z.max_constant_});
 }
 
 template <typename LocationT>

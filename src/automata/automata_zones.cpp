@@ -56,20 +56,62 @@ namespace tacos::zones {
 	}
 
 	bool
+	is_satisfied(const automata::ClockConstraint &constraint, const Zone_slice &zone)
+	{
+		//TODO IS THIS EVEN TRUE????
+		//If the zone is empty (i.e. invalid interval), then it will satisfy all constraints
+		if(zone.lower_bound_ > zone.upper_bound_ || (zone.lower_bound_ == zone.upper_bound_ && zone.lower_isOpen_ && zone.upper_isOpen_)) {
+			return true;
+		}
+
+		Endpoint constant = std::visit([](const auto &atomic_clock_constraint)
+					  -> Time { return atomic_clock_constraint.get_comparand(); },
+					  constraint); //Visit due to ClockConstraint being a variant
+
+		std::optional<int> relation_opt = automata::get_relation_index(constraint);
+		assert(relation_opt.has_value());
+		int relation = relation_opt.value();
+
+		switch (relation)
+		{
+		case 0: //less
+			return (zone.lower_bound_ < constant && (zone.upper_bound_ < constant || (zone.upper_bound_ == constant && zone.upper_isOpen_)));
+		case 1: //less_equal
+			return (zone.lower_bound_ <  constant ||
+				  (zone.lower_bound_ == constant && !zone.lower_isOpen_)) &&
+				   (zone.upper_bound_ <= constant);
+		case 2: //equal_to
+			return zone.lower_bound_ == constant && zone.upper_bound_ == constant && !zone.lower_isOpen_ && !zone.upper_isOpen_;
+		case 4: //greater_equal
+			return (zone.upper_bound_ >  constant ||
+				  (zone.upper_bound_ == constant && !zone.upper_isOpen_)) &&
+				  zone.lower_bound_ >= constant;
+		case 5: //greater
+			return zone.upper_bound_ > constant && (zone.lower_bound_ > constant || (zone.lower_bound_ == constant && zone.lower_isOpen_));
+		default: //not_equal or other oopsie (We assume inequality constraints don't exist for zones)
+			assert(false);
+		}
+
+		return false;
+	}
+
+	bool
 	is_valid_zone(const Zone_slice &zone)
 	{
-		return  (zone.lower_bound_ <= zone.upper_bound_) &&
-				(zone.lower_bound_ <= zone.max_constant_) &&
-				(zone.upper_bound_ <= zone.max_constant_) &&
-				//If both bounds are equal, none of the bounds may be open since this would lead to a contradiction (e.g. a < x < a ==> a < a)
-				(zone.lower_bound_ < zone.upper_bound_ || !(zone.lower_isOpen_ || zone.upper_isOpen_) ||
-				//One of the bounds can be open if the interval actually stretches towards infinity
-				(zone.lower_isOpen_ && !zone.upper_isOpen_ && zone.upper_bound_ == zone.max_constant_));
+		return  (zone.lower_bound_ <= zone.max_constant_) &&
+				(zone.upper_bound_ <= zone.max_constant_);
 	}
 
 	std::ostream &
 	operator<<(std::ostream &os, const zones::Zone_slice &zone_slice)
 	{
+		//Check whether it is empty set
+		if(zone_slice.is_empty()) {
+			os << u8"∅";
+
+			return os;
+		}
+
 		std::string leftBracket = "[";
 		std::string rightBracket = "]";
 		if(zone_slice.lower_isOpen_)

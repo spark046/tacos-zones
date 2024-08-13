@@ -64,7 +64,7 @@ public:
 	                  ATAConfiguration<ConstraintSymbolType>> &ab_configuration,
 	  const RegionIndex,
 	  const RegionIndex K,
-	  const bool use_zones = false)
+	  const bool use_zones = false) //TODO Remove use_zones, it's still here for some tests
 	{
 		static_assert(use_location_constraints || std::is_same_v<ActionType, ConstraintSymbolType>);
 		static_assert(

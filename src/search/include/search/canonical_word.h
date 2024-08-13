@@ -176,20 +176,23 @@ is_valid_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &w
 
 	// There cannot be both regionalized ABSymbols and ABSymbols using zones.
 	//Check whether the "first" element is regionalized or not, we then check whether the rest matches
-	bool regionalized = (std::holds_alternative<PlantRegionState<Location>>(*word[0].begin()) || std::holds_alternative<ATARegionState<ConstraintSymbolType>>(*word[0].begin()) );
+	bool regionalized = (std::holds_alternative<PlantRegionState<Location>>(*word[0].begin()) ||
+						 std::holds_alternative<ATARegionState<ConstraintSymbolType>>(*word[0].begin()) );
 
 	std::for_each(word.begin(), word.end(), [&word, regionalized](const auto &configurations) {
 		if(regionalized) {
 			if (std::any_of(configurations.begin(),
 							configurations.end(),
-							[](const auto &w) { return (std::holds_alternative<PlantZoneState<Location>>(w) || std::holds_alternative<ATAZoneState<ConstraintSymbolType>>(w)); }))
+							[](const auto &w) { return (std::holds_alternative<PlantZoneState<Location>>(w) ||
+														std::holds_alternative<ATAZoneState<ConstraintSymbolType>>(w)); }))
 			{
 				throw InvalidCanonicalWordException(word, "Word contains both regionalized and zone configurations");
 			}
 		} else {
 			if (std::any_of(configurations.begin(),
 							configurations.end(),
-							[](const auto &w) { return (std::holds_alternative<PlantRegionState<Location>>(w) || std::holds_alternative<ATARegionState<ConstraintSymbolType>>(w)); }))
+							[](const auto &w) { return (std::holds_alternative<PlantRegionState<Location>>(w) ||
+														std::holds_alternative<ATARegionState<ConstraintSymbolType>>(w)); }))
 			{
 				throw InvalidCanonicalWordException(word, "Word contains both regionalized and zone configurations");
 			}
@@ -289,6 +292,99 @@ is_region_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &
 	return (std::holds_alternative<PlantRegionState<Location>>(*word[0].begin()) || std::holds_alternative<ATARegionState<ConstraintSymbolType>>(*word[0].begin()) );
 }
 
+/**
+ * Gets the location of the TA State within the canonical ABWord.
+ * The CanonicalABWord must/should have only one TA-Configuration, i.e. potentially multiple clocks at the same location
+ * 
+ * @param word CanonicalABWord
+ * 
+ * @return The location of the TA-Configuration
+ */
+template <typename Location, typename ConstraintSymbolType>
+Location
+get_canonical_word_ta_location(const CanonicalABWord<Location, ConstraintSymbolType> &word)
+{
+	//Since a CanonicalABWord only has one TA-Configuration, we just have to check the first PlantRegionState/PlantZoneState
+	for(const auto &partition : word) {
+		for(const auto &symbol : partition) {
+			if(std::holds_alternative<PlantZoneState<Location>>(symbol)) {
+				auto state = std::get<PlantZoneState<Location>>(symbol);
+
+				return state.location;
+			} else if(std::holds_alternative<PlantRegionState<Location>>(symbol)) {
+				auto state = std::get<PlantRegionState<Location>>(symbol);
+
+				return state.location;
+			}
+		}
+	}
+
+	//Somehow there was no TA-Configuration, which should be impossible
+	assert(false);
+
+	//Necessary Rubbish
+	Location l = Location();
+	return l;
+}
+
+/**
+ * Get a map of the zone_slice for each clock within a CanonicalABWord
+ * 
+ * @param word A CanonicalABWord which uses zones
+ * 
+ * @return A map where the key is the clock name and the value is the Zone_slice (clock, Zone)
+ */
+template <typename Location, typename ConstraintSymbolType>
+std::map<std::string, zones::Zone_slice>
+get_canonical_word_zones(const CanonicalABWord<Location, ConstraintSymbolType> &word)
+{
+	//NOT a regionalized canonical word
+	assert(!is_region_canonical_word(word));
+
+	std::map<std::string, zones::Zone_slice> ret;
+
+	for(const auto &partition : word) {
+		for(const auto &symbol : partition) {
+			if(std::holds_alternative<PlantZoneState<Location>>(symbol)) {
+				const auto &state = std::get<PlantZoneState<Location>>(symbol);
+
+				ret.insert( {state.clock, state.symbolic_valuation} );
+			} else { //ATAZoneState
+				const auto &state = std::get<ATAZoneState<ConstraintSymbolType>>(symbol);
+
+				ret.insert( {"", state.symbolic_valuation} );
+			}
+		}
+	}
+
+	return ret;
+}
+
+/**
+ * Gets a set of ABRegionSymbols that are ATAZoneStates
+ * 
+ * @param word A canonical word using zones
+ * @return A std::set of ATAZoneStates
+ */
+template <typename Location, typename ConstraintSymbolType>
+std::set<ATAZoneState<ConstraintSymbolType>>
+get_ata_symbols_from_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &word)
+{
+	std::set<ATAZoneState<ConstraintSymbolType>> ret;
+
+	for(const auto &partition : word) {
+		for(const auto &symbol : partition) {
+			if(std::holds_alternative<ATAZoneState<ConstraintSymbolType>>(symbol)) {
+				auto state = std::get<ATAZoneState<ConstraintSymbolType>>(symbol);
+
+				ret.insert( state );
+			}
+		}
+	}
+
+	return ret;
+}
+
 /** Get the canonical word H(s) for the given A/B configuration s, closely
  * following Bouyer et al., 2006. The TAStates of s are first expanded into
  * triples (location, clock, valuation) (one for each clock), and then merged
@@ -363,7 +459,7 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 		}
 		assert(is_valid_canonical_word(abs, 2 * K + 1));
 		return abs;
-	} else {
+	} else { //zones
 		CanonicalABWord<Location, ConstraintSymbolType> abs;
 
 		for (const auto &[fractional_part, g_i] : partitioned_g) {

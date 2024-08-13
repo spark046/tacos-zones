@@ -470,57 +470,267 @@ public:
 		return nodes_;
 	}
 
-private:
-
-	/**
-	 * Get the clock constraints from the transitions of the TA, that can be used from this specific canonical word.
-	 * I.e. Location and Symbolic Valuations are checked.
-	 * 
-	 * @param ta The TA Transition System
-	 * @param word CanonicalABWord from which the transitions go out from
-	 * 
-	 * @return A multimap of clock constraints with key/value (clock name, clock constraint)
-	 */
-	std::multimap<std::string, automata::ClockConstraint>
-	get_transition_clock_constraints(const CanonicalABWord<Location, ConstraintSymbolType> &word)
+	/* //Testing
+	std::set<PlantZoneState<Location>>
+	compute_ta_successor(ActionType symbol,
+						 CanonicalABWord<Location, ConstraintSymbolType> time_successor,
+						 automata::ta::Transition<Location, ActionType>  curr_transition)
 	{
-		std::multimap<std::string, automata::ClockConstraint> ret;
+		std::map<std::string, zones::Zone_slice> new_zones = get_canonical_word_zones(time_successor);
 
-		const auto &transitions = ta_->get_transitions();
+		std::set<PlantZoneState<Location>> ta_successors;
+		//0. Check whether this transition is for the current symbol
+		if(curr_transition.symbol_ != symbol) {
+			continue;
+		}
 
-		auto ta_word = reg_a(word);
+		//1. Intersect the zone of transition guard and current zone
+		auto clock_constraints = curr_transition.get_guards();
+		for(const auto &clock : ta_->get_clocks()) {
+			auto [curr_constraint, last_constraint] = clock_constraints.equal_range(clock);
+			for(; curr_constraint != last_constraint; curr_constraint++) {
+				new_zones.at(clock).conjunct(curr_constraint->second);
+			}
+		}
 
-		for(const auto &partition : word) {
-			for (const auto &ab_symbol : partition) {
-				if (std::holds_alternative<PlantRegionState<Location>>(ab_symbol)) {
-					const auto &ta_state = std::get<PlantRegionState<Location>>(ab_symbol);
+		//2. Reset Zones
+		for (const auto &clock : curr_transition.clock_resets_) {
+			new_zones.at(clock).reset();
+		}
 
-					auto [curr, last] = transitions.equal_range(ta_state.location);
-					for(;curr != last; curr++) {
-						std::multimap<std::string, automata::ClockConstraint> clock_constraints = curr->second.get_guards();
-						for(auto iter1 = clock_constraints.begin(); iter1 != clock_constraints.end(); iter1++) {
-							if(automata::is_satisfied(iter1->second, (Time) ta_state.symbolic_valuation)) {
-								ret.insert(curr->second.get_guards().begin(), curr->second.get_guards().end());
+		//3. Calculate new Location and insert PlantZoneState to successors
+		for(const auto &clock : ta_->get_clocks()) {
+			ta_successors.insert(PlantZoneState<Location>{curr_transition.target_, clock, new_zones.at(clock)});
+		}
+
+		return ta_successors;
+	}
+
+	//testing
+	std::set<ATAZoneState<ConstraintSymbolType>>
+	compute_ata_successor(ActionType symbol,
+						  CanonicalABWord<Location, ConstraintSymbolType> time_successor,
+						  automata::ata::Transition<logic::MTLFormula<ConstraintSymbolType>, logic::AtomicProposition<ATAInputType>> transition)
+	{
+		using ATAConfiguration = automata::ata::ZoneConfiguration<logic::MTLFormula<ConstraintSymbolType>>;
+
+		std::set<ATAZoneState<ConstraintSymbolType>> ata_successors;
+
+		for(const auto &state : get_ata_symbols_from_canonical_word(time_successor)) {
+			//0. Check whether this transition is for the current symbol
+			if(transition.get_symbol() != logic::AtomicProposition{symbol}) {
+				continue;
+			}
+
+			//1. Intersect Zone for the minimal model
+			auto intersected_zone = state.symbolic_valuation;
+
+			auto clock_constraints = transition.get_clock_constraints();
+			for(const auto &constraint : clock_constraints) {
+				intersected_zone.conjunct(constraint);
+			}
+
+			//Minimal Models for this state and transition
+			ATAConfiguration model = transition.get_a_minimal_model(intersected_zone);
+
+			//The model is empty, i.e. no meaningful transition could be made
+			if(model.empty()) {
+				//Check whether we have sink location or not
+				if(ata_->get_sink_location().has_value()) {
+					ata_successors.insert(ATAZoneState<ConstraintSymbolType>{
+											ata_->get_sink_location().value(), zones::Zone_slice{0, 0, false, false, 2*K_}
+											});
+				}
+				continue;
+			}
+
+			for(const auto &new_state : model) {
+				ata_successors.insert(ATAZoneState<ConstraintSymbolType>{new_state.location, new_state.zone});
+			}
+		}
+
+		return ata_successors;
+	} */
+
+	//Public for testing purposes
+	std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>>
+	compute_next_canonical_words(const CanonicalABWord<Location, ConstraintSymbolType> &time_successor)
+	{
+		using ATAConfiguration = automata::ata::ZoneConfiguration<logic::MTLFormula<ConstraintSymbolType>>;
+		//TODO I think for Golog plants the weird thing for adapters is still necessary, so add a zone adapter or something
+		//TODO Also location constraints aren't added
+
+		//TODO So many for loops to go through the canonical word. For Architecture it's better to keep the functions seperate, but very inefficient
+
+		//Take every symbol transition from TA and ATA in order to intersect the current zone with the transition guards.
+
+		//TODO This assumes the TA is deterministic instead of Non-Deterministic (i.e. for one transition from some Configuration, there is
+		//only exactly one new target Configuration)
+
+		std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>> successors;
+
+		std::map<std::string, zones::Zone_slice> old_zones = get_canonical_word_zones(time_successor);
+
+		for(const auto &symbol : ta_->get_alphabet()) {
+
+			Location location = get_canonical_word_ta_location(time_successor);
+
+
+			auto [curr_transition, last_transition] = ta_->get_transitions().equal_range(location);
+			for(; curr_transition != last_transition; curr_transition++) {
+				std::set<PlantZoneState<Location>> ta_successors;
+				std::map<std::string, zones::Zone_slice> new_zones = old_zones;
+
+				//0. Check whether this transition is for the current symbol
+				if(curr_transition->second.symbol_ != symbol) {
+					continue;
+				}
+
+				//1. Intersect the zone of transition guard and current zone
+				auto clock_constraints = curr_transition->second.get_guards();
+				for(const auto &clock : ta_->get_clocks()) {
+					auto [curr_constraint, last_constraint] = clock_constraints.equal_range(clock);
+					for(; curr_constraint != last_constraint; curr_constraint++) {
+						new_zones.at(clock).conjunct(curr_constraint->second);
+					}
+				}
+
+				//1.5 Check for empty zones, if a zone is empty, stop considering this transition
+				bool stop_considering = false;
+				for(const auto &clock : ta_->get_clocks()) {
+					if(new_zones.at(clock).is_empty()) {
+						stop_considering = true;
+					}
+				}
+				if(stop_considering) {
+					continue;
+				}
+
+				//2. Reset Zones
+				for (const auto &clock : curr_transition->second.clock_resets_) {
+					//Do not reset empty clocks as they are invalid or something
+					new_zones.at(clock).reset();
+				}
+
+				//3. Calculate new Location and insert PlantZoneState to successors
+				for(const auto &clock : ta_->get_clocks()) {
+					ta_successors.insert(PlantZoneState<Location>{curr_transition->second.target_, clock, new_zones.at(clock)});
+				}
+
+				for(const auto &transition : ata_->get_transitions()) {
+					//ATA transitions
+					std::set<ATAZoneState<ConstraintSymbolType>> ata_successors;
+					for(const auto &state : get_ata_symbols_from_canonical_word(time_successor)) {
+						//0. Check whether this transition is for the current symbol
+						if(transition.get_symbol() != logic::AtomicProposition{symbol}) {
+							continue;
+						}
+
+						//1. Intersect Zone for the minimal model
+						auto intersected_zone = state.symbolic_valuation;
+
+						auto clock_constraints = transition.get_clock_constraints();
+						for(const auto &constraint : clock_constraints) {
+							intersected_zone.conjunct(constraint);
+						}
+
+						//Minimal Models for this state and transition
+						ATAConfiguration model = transition.get_a_minimal_model(intersected_zone);
+
+						//The model is empty, i.e. no meaningful transition could be made
+						if(model.empty()) {
+							//Check whether we have sink location or not
+							if(ata_->get_sink_location().has_value()) {
+								ata_successors.insert(ATAZoneState<ConstraintSymbolType>{
+														ata_->get_sink_location().value(), zones::Zone_slice{0, 0, false, false, K_}
+														});
+							}
+							continue;
+						}
+
+						for(const auto &new_state : model) {
+							ata_successors.insert(ATAZoneState<ConstraintSymbolType>{new_state.location, new_state.zone});
+						}
+					}
+
+					//Construct the new CanonicalABWord for each symbol taken
+					CanonicalABWord<Location, ConstraintSymbolType> new_word;
+					for(const auto &curr_ta_successor : ta_successors) {
+						//TODO Find better way to sort CanonicalWords. Fractional Part isn't very good for zones
+						//find correct index to sort it into (TODO For now just compare the zones, so if they are the same, they are in the same partition)
+						std::size_t index = 0;
+						for(; index < new_word.size(); index++) {
+							if(curr_ta_successor.symbolic_valuation == get_zone_slice(*new_word[index].begin(), 2*K_)) {
+								new_word[index].insert(curr_ta_successor);
+								break;
+							}
+						}
+						//No matching zone was found, create new partition
+						if(index == new_word.size()) {
+							//TODO Probably define a better way to sort this
+							//Sort the canonical word according to the zones.
+							zones::Zone_slice zone_to_insert = curr_ta_successor.symbolic_valuation;
+							std::size_t jndex = 0;
+
+							for(; jndex < new_word.size(); jndex++) {
+								zones::Zone_slice curr_zone = get_zone_slice(*new_word[jndex].begin(), 2*K_);
+								if(zone_to_insert < curr_zone) {
+									continue;
+								}
+
+								std::set<ABRegionSymbol<Location, ConstraintSymbolType>> new_partition{curr_ta_successor};
+								new_word.insert(new_word.begin() + jndex, new_partition);
+								break;
+							}
+							//End of the word has been reached, so just append it
+							if(jndex == new_word.size()) {
+								std::set<ABRegionSymbol<Location, ConstraintSymbolType>> new_partition{curr_ta_successor};
+								new_word.push_back(new_partition);
 							}
 						}
 					}
-				} else if(std::holds_alternative<PlantZoneState<Location>>(ab_symbol)) {
-					const auto &ta_state = std::get<PlantZoneState<Location>>(ab_symbol);
 
-					auto [curr, last] = transitions.equal_range(ta_state.location);
-					for(;curr != last; curr++) {
-						std::multimap<std::string, automata::ClockConstraint> clock_constraints = curr->second.get_guards();
-						for(auto iter1 = clock_constraints.begin(); iter1 != clock_constraints.end(); iter1++) {
-							if(ta_state.symbolic_valuation.fulfills_constraints(iter1->second)) {
-								ret.insert(curr->second.get_guards().begin(), curr->second.get_guards().end());
+					for(const auto &curr_ata_successor : ata_successors) {
+						//TODO Find better way to sort CanonicalWords. Fractional Part isn't very good for zones
+						//find correct index to sort it into (TODO For now just compare the zones, so if they are the same, they are in the same partition)
+						std::size_t index = 0;
+						for(; index < new_word.size(); index++) {
+							if(curr_ata_successor.symbolic_valuation == get_zone_slice(*new_word[index].begin(), 2*K_)) {
+								new_word[index].insert(curr_ata_successor);
+								break;
+							}
+						}
+						//No matching zone was found, create new partition
+						if(index == new_word.size()) {
+							//TODO Probably define a better way to sort this
+							//Sort the canonical word according to the zones.
+							zones::Zone_slice zone_to_insert = curr_ata_successor.symbolic_valuation;
+							std::size_t jndex = 0;
+
+							for(; jndex < new_word.size(); jndex++) {
+								zones::Zone_slice curr_zone = get_zone_slice(*new_word[jndex].begin(), 2*K_);
+								if(zone_to_insert < curr_zone) {
+									continue;
+								}
+
+								std::set<ABRegionSymbol<Location, ConstraintSymbolType>> new_partition{curr_ata_successor};
+								new_word.insert(new_word.begin() + jndex, new_partition);
+								break;
+							}
+
+							if(jndex == new_word.size()) {
+								std::set<ABRegionSymbol<Location, ConstraintSymbolType>> new_partition{curr_ata_successor};
+								new_word.push_back(new_partition);
 							}
 						}
 					}
+
+					successors.insert( {symbol, new_word});
 				}
 			}
 		}
 
-		return ret;
+		return successors;
 	}
 
 	std::pair<std::set<Node *>, std::set<Node *>>
@@ -537,16 +747,18 @@ private:
 		const auto time_successors = get_time_successors(node->words, K_);
 		for (std::size_t increment = 0; increment < time_successors.size(); ++increment) {
 			for (const auto &time_successor : time_successors[increment]) {
-				std::multimap<std::string, automata::ClockConstraint> clockity_constraintsy =
-					get_transition_clock_constraints(time_successor);
-
-				auto successors =
-				  get_next_canonical_words<Plant,
-				                           ActionType,
-				                           ConstraintSymbolType,
-				                           use_location_constraints,
-				                           use_set_semantics>(controller_actions_, environment_actions_)(
-				    *ta_, *ata_, get_candidate(time_successor, clockity_constraintsy), increment, K_, use_zones_);
+				std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>> successors;
+				if(is_region_canonical_word(time_successor)) {
+					successors =
+					  get_next_canonical_words<Plant,
+					                           ActionType,
+					                           ConstraintSymbolType,
+					                           use_location_constraints,
+					                           use_set_semantics>(controller_actions_, environment_actions_)(
+					    *ta_, *ata_, get_candidate(time_successor), increment, K_, use_zones_);
+				} else { //zones
+					successors = compute_next_canonical_words(time_successor);
+				}
 				for (const auto &[symbol, successor] : successors) {
 					assert(
 					  std::find(std::begin(controller_actions_), std::end(controller_actions_), symbol)
@@ -581,6 +793,8 @@ private:
 		}
 		return {new_children, existing_children};
 	}
+
+private:
 
 	const Plant *const ta_;
 	const automata::ata::AlternatingTimedAutomaton<logic::MTLFormula<ConstraintSymbolType>,

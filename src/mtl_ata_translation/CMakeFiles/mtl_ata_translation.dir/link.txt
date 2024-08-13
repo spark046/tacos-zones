@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -g -shared -Wl,-soname,libmtl_ata_translation.so -o libmtl_ata_translation.so CMakeFiles/mtl_ata_translation.dir/translator.cpp.o  -Wl,-rpath,/home/spark046/Documents/Git/tacos-zones/src/automata: ../automata/libautomata.so /usr/lib64/libfmt.so.10.2.1 -ltinyxml2 -lpthread -lfmt 

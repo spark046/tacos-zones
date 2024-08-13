@@ -10,6 +10,7 @@
 #define SRC_AUTOMATA_INCLUDE_AUTOMATA_ATA_FORMULA_H
 
 #include "automata.h"
+#include "automata_zones.h"
 
 #include <fmt/ostream.h>
 
@@ -61,6 +62,46 @@ operator==(const State<LocationT> &s1, const State<LocationT> &s2)
 	return !(s1 < s2) && !(s2 < s1);
 }
 
+/** A state of an ATA symbolically encoded using zones.
+ *  This is essentially search::ATAZoneState, but again due to encapsulation
+ * 
+ * @tparam The location type
+ */
+template <typename LocationT>
+struct ZoneState
+{
+	/** The location of the state */
+	LocationT location;
+	/** The clock valuation of the state */
+	zones::Zone_slice zone;
+};
+
+/** Compare two Zone States.
+ * @param s1 The first state
+ * @param s2 The second state
+ * @return true if s1 is lexicographically smaller than s2, i.e., true if s1's location is smaller
+ * than s2's location, or if the locations are the same and s1's clock valuation is smaller than
+ * s2's clock valuation
+ */
+template <typename LocationT>
+bool
+operator<(const ZoneState<LocationT> &s1, const ZoneState<LocationT> &s2)
+{
+	return std::tie(s1.location, s1.zone) < std::tie(s2.location, s2.zone);
+}
+
+/** Check two Zone states for equality
+ * @param s1 The first state
+ * @param s2 The second state
+ * @return true if both states are identical
+ */
+template <typename LocationT>
+bool
+operator==(const ZoneState<LocationT> &s1, const ZoneState<LocationT> &s2)
+{
+	return !(s1 < s2) && !(s2 < s1);
+}
+
 // using State = std::pair<LocationT, ClockValuation>;
 
 template <typename LocationT>
@@ -94,6 +135,12 @@ std::ostream &operator<<(std::ostream &os, const automata::ata::Formula<Location
 template <typename LocationT>
 std::ostream &operator<<(std::ostream &os, const automata::ata::State<LocationT> &state);
 
+/**
+ * Print a ZoneState
+ */
+template <typename LocationT>
+std::ostream &operator<<(std::ostream &os, const automata::ata::ZoneState<LocationT> &state);
+
 /// An abstract ATA formula.
 template <typename LocationT>
 class Formula
@@ -111,12 +158,30 @@ public:
 	 */
 	[[nodiscard]] virtual bool is_satisfied(const std::set<State<LocationT>> &states,
 	                                        const ClockValuation             &v) const = 0;
+
+	/** Check if the formula is satisfied by a symbolic configuration and a zone.
+	 * 
+	 * @param states Configuration using zones to check
+	 * @param z The zone to check
+	 * @return true if formula is satisfied
+	 */
+	[[nodiscard]] virtual bool is_satisfied(const std::set<ZoneState<LocationT>> &states,
+											const zones::Zone_slice              &z) const = 0;
+
 	/** Compute the minimal model of the formula.
-	 * @param v The clock valuation to evaluate teh formula against
+	 * @param v The clock valuation to evaluate the formula against
 	 * @return a set of minimal models, where each minimal model consists of a set of states
 	 */
 	virtual std::set<std::set<State<LocationT>>>
 	get_minimal_models(const ClockValuation &v) const = 0;
+
+	/** Compute minimal model of the formula using zones.
+	 * 
+	 * @param z The zone to evaluate the formula against. This zone is intersected with any transition guards
+	 * @return a set of minimal models, where each minimal model is a set of states
+	*/
+	virtual std::set<std::set<ZoneState<LocationT>>>
+	get_minimal_models(const zones::Zone_slice &z) const = 0;
 
 	// clang-format off
 	friend std::ostream & operator<< <>(std::ostream &os, const Formula &formula);
@@ -140,7 +205,9 @@ class TrueFormula : public Formula<LocationT>
 {
 public:
 	bool is_satisfied(const std::set<State<LocationT>> &, const ClockValuation &) const override;
+	bool is_satisfied(const std::set<ZoneState<LocationT>> &, const zones::Zone_slice &) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &) const override;
+	std::set<std::set<ZoneState<LocationT>>> get_minimal_models(const zones::Zone_slice &) const override;
 	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
@@ -156,7 +223,9 @@ class FalseFormula : public Formula<LocationT>
 {
 public:
 	bool is_satisfied(const std::set<State<LocationT>> &, const ClockValuation &) const override;
+	bool is_satisfied(const std::set<ZoneState<LocationT>> &, const zones::Zone_slice &) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &) const override;
+	std::set<std::set<ZoneState<LocationT>>> get_minimal_models(const zones::Zone_slice &) const override;
 	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
@@ -179,9 +248,10 @@ public:
 	 * @param location The location that must be in the configuration to satisfy this formula
 	 */
 	explicit LocationFormula(const LocationT &location) : location_(location){};
-	bool                                 is_satisfied(const std::set<State<LocationT>> &states,
-	                                                  const ClockValuation             &v) const override;
+	bool is_satisfied(const std::set<State<LocationT>> &states, const ClockValuation &v) const override;
+	bool is_satisfied(const std::set<ZoneState<LocationT>> &states, const zones::Zone_slice &z) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &v) const override;
+	std::set<std::set<ZoneState<LocationT>>> get_minimal_models(const zones::Zone_slice &z) const override;
 	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
@@ -210,7 +280,9 @@ public:
 	{
 	}
 	bool is_satisfied(const std::set<State<LocationT>> &, const ClockValuation &v) const override;
+	bool is_satisfied(const std::set<ZoneState<LocationT>> &, const zones::Zone_slice &z) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &v) const override;
+	std::set<std::set<ZoneState<LocationT>>> get_minimal_models(const zones::Zone_slice &z) const override;
 	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
@@ -242,10 +314,11 @@ public:
 	{
 	}
 
-	bool is_satisfied(const std::set<State<LocationT>> &states,
-	                  const ClockValuation             &v) const override;
+	bool is_satisfied(const std::set<State<LocationT>> &states, const ClockValuation &v) const override;
+	bool is_satisfied(const std::set<ZoneState<LocationT>> &states, const zones::Zone_slice &z) const override;
 
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &v) const override;
+	std::set<std::set<ZoneState<LocationT>>> get_minimal_models(const zones::Zone_slice &z) const override;
 	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
@@ -278,9 +351,10 @@ public:
 	{
 	}
 
-	bool                                 is_satisfied(const std::set<State<LocationT>> &states,
-	                                                  const ClockValuation             &v) const override;
+	bool is_satisfied(const std::set<State<LocationT>> &states, const ClockValuation &v) const override;
+	bool is_satisfied(const std::set<ZoneState<LocationT>> &states, const zones::Zone_slice &z) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &v) const override;
+	std::set<std::set<ZoneState<LocationT>>> get_minimal_models(const zones::Zone_slice &z) const override;
 	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
@@ -310,9 +384,10 @@ public:
 	: sub_formula_(std::move(sub_formula))
 	{
 	}
-	bool                                 is_satisfied(const std::set<State<LocationT>> &states,
-	                                                  const ClockValuation &) const override;
+	bool is_satisfied(const std::set<State<LocationT>> &states, const ClockValuation &) const override;
+	bool is_satisfied(const std::set<ZoneState<LocationT>> &states, const zones::Zone_slice &z) const override;
 	std::set<std::set<State<LocationT>>> get_minimal_models(const ClockValuation &) const override;
+	std::set<std::set<ZoneState<LocationT>>> get_minimal_models(const zones::Zone_slice &z) const override;
 	std::set<automata::ClockConstraint> get_clock_constraints() const override;
 
 protected:
@@ -368,6 +443,11 @@ struct formatter<tacos::automata::ata::Formula<LocationT>> : ostream_formatter
 
 template <typename LocationT>
 struct formatter<tacos::automata::ata::State<LocationT>> : ostream_formatter
+{
+};
+
+template <typename LocationT>
+struct formatter<tacos::automata::ata::ZoneState<LocationT>> : ostream_formatter
 {
 };
 

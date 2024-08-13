@@ -21,7 +21,7 @@
 
 #include <limits>
 
-	namespace tacos::zones {
+namespace tacos::zones {
 
 	/**
 	 * Struct modeling the set of valuations of a zone for an atomic clock constraint (i.e. no conjunctions)
@@ -33,7 +33,8 @@
 		Endpoint upper_bound_;
 		bool lower_isOpen_;
 		bool upper_isOpen_;
-		//If the upper_bound is equal to the max_constant (so the upper bound isn't strict), it is assumed that the upperbound is positive infinity. If max_constant is 0, there is no max constant
+		//If the upper_bound is equal to the max_constant (so the upper bound isn't strict), it is assumed that the upperbound is positive infinity. If max_constant
+		//is 0, there is no max constant
 		Endpoint max_constant_;
 
 		/** Constructor for Zone slice. If upper_bound is larger than the max_constant, it is set back to the max_constant */
@@ -61,7 +62,7 @@
 
 			std::optional<int> relation_opt = automata::get_relation_index(clock_constraint);
 			assert(relation_opt.has_value());
-			int relation = relation_opt.value();			
+			int relation = relation_opt.value();
 
 			switch (relation)
 			{
@@ -141,38 +142,24 @@
 				(valuation >  (ClockValuation) lower_bound_ && (valuation < (ClockValuation) upper_bound_ || upper_bound_ >= max_constant_));
 		}
 
-		/** Returns true if this zone fulfills the ClockConstraint */
-		bool fulfills_constraints(automata::ClockConstraint clock_constraint) const
+		/** Returns true if zone2 is a subset of this zone, otherwise returns false
+		 * 
+		 * @param zone2 The zone that is supposed to be a subset
+		 * @return True iff zone2 is a subset of this zone
+		 */
+		bool contains_zone(Zone_slice zone2) const
 		{
-			Endpoint constant = std::visit([](const auto &atomic_clock_constraint)
-						  -> Time { return atomic_clock_constraint.get_comparand(); },
-						  clock_constraint); //Visit due to ClockConstraint being a variant
+			return
+				(lower_bound_ < zone2.lower_bound_ || (lower_bound_ == zone2.lower_bound_ && ((lower_isOpen_ && zone2.lower_isOpen_) || !lower_isOpen_))) &&
+				(upper_bound_ > zone2.upper_bound_ || (upper_bound_ == zone2.upper_bound_ && ((upper_isOpen_ && zone2.upper_isOpen_) || !upper_isOpen_))) &&
+				(max_constant_ >= zone2.max_constant_);
+		}
 
-			std::optional<int> relation_opt = automata::get_relation_index(clock_constraint);
-			assert(relation_opt.has_value());
-			int relation = relation_opt.value();			
-
-			switch (relation)
-			{
-			case 0: //less
-				return (lower_bound_ < constant && (upper_bound_ < constant || (upper_bound_ == constant && upper_isOpen_)));
-			case 1: //less_equal
-				return (lower_bound_ <  constant ||
-					  (lower_bound_ == constant && !lower_isOpen_)) &&
-					   (upper_bound_ <= constant);
-			case 2: //equal_to
-				return lower_bound_ == constant && upper_bound_ == constant;
-			case 4: //greater_equal
-				return (upper_bound_ >  constant ||
-					  (upper_bound_ == constant && !upper_isOpen_)) &&
-					  lower_bound_ >= constant;
-			case 5: //greater
-				return upper_bound_ > constant && (lower_bound_ > constant || (lower_bound_ == constant && lower_isOpen_));
-			default: //not_equal or other oopsie (We assume inequality constraints don't exist for zones)
-				assert(false);
-			}
-
-			return false;
+		/** Returns true if this zone represents the empty set */
+		bool is_empty() const
+		{
+			return lower_bound_ > upper_bound_ ||
+				  (lower_bound_ == upper_bound_ && (lower_isOpen_ && upper_isOpen_));
 		}
 
 		/**
@@ -214,8 +201,14 @@
 		 */
 		void intersect(const Zone_slice &zone2)
 		{
-			//TODO: Add proper handling
-			assert(!(lower_bound_ > zone2.upper_bound_ || upper_bound_ < zone2.lower_bound_)); //If the intersetion is empty, we don't want this
+			//If the intersection is empty, we just make it to (0;0) to represent the empty set, however leaving it invalid should be fine
+			if((lower_bound_ > zone2.upper_bound_ || upper_bound_ < zone2.lower_bound_) || is_empty() || zone2.is_empty()) {
+				lower_bound_ = 0;
+				upper_bound_ = 0;
+				lower_isOpen_ = true;
+				upper_isOpen_ = true;
+				return;
+			}
 
 			if(lower_bound_ <= zone2.lower_bound_)
 			{
@@ -234,6 +227,22 @@
 			}
 		}
 
+		/**
+		 * Resets this zone by setting it to the closed interval from 0 to 0 [0;0]
+		 */
+		void reset()
+		{
+			//Do not reset empty zones.
+			if(is_empty()) {
+				return;
+			}
+
+			lower_bound_ = 0;
+			upper_bound_ = 0;
+			lower_isOpen_ = false;
+			upper_isOpen_ = false;
+		}
+
 		/** Compare two symbolic states.
 		 * @param s1 The first state
 		 * @param s2 The second state
@@ -242,7 +251,8 @@
 		friend bool
 		operator<(const Zone_slice &s1, const Zone_slice &s2) //Use forward_as_tuple instead of tie due to rvalues
 		{
-			return std::forward_as_tuple(s1.lower_bound_, s1.upper_bound_, !s1.lower_isOpen_, !s1.upper_isOpen_, s1.max_constant_) //Logical negation, since strict is usually smaller, and false == 0. Not really that important
+			//Logical negation, since strict is usually smaller, and false == 0. Not really that important
+			return std::forward_as_tuple(s1.lower_bound_, s1.upper_bound_, !s1.lower_isOpen_, !s1.upper_isOpen_, s1.max_constant_)
 			       < std::forward_as_tuple(s2.lower_bound_, s2.upper_bound_, !s2.lower_isOpen_, !s2.upper_isOpen_, s2.max_constant_);
 		}
 
@@ -267,6 +277,7 @@
 
 	/**
 	 * @brief Checks whether a zone's interval is valid, i.e. lower bound is less equal to upper bound, and no bounds exceed the max constant
+	 * Kind of a trivial check now that empty sets can be represented by "invalid" zones.
 	 * 
 	 * @param zone Zone to be checked
 	 * @return Returns true if zone is valid
@@ -275,9 +286,11 @@
 	is_valid_zone(const Zone_slice &zone);
 
 	/**
-	 * @brief Get a multimap of all fulfilled clock constraints by some specific valuation. This corresponds to the set of all zones' constraints that fulfill this valuation.
+	 * @brief Get a multimap of all fulfilled clock constraints by some specific valuation. This corresponds to the set of all zones' constraints
+	 * that fulfill this valuation.
 	 * 
-	 * @param allConstraints Multimap containing all clock constraints that should be checked with the valuation. The key is the clock and the value is a clock constraint.	
+	 * @param allConstraints Multimap containing all clock constraints that should be checked with the valuation. The key is the clock and the value
+	 * is a clock constraint.	
 	 * @param clock Name of the relevant clock
 	 * @param val Valuation of the clock
 	 * @return Multimap that only consists of all fulfilled constraints
@@ -294,6 +307,16 @@
 	 */
 	std::vector<automata::ClockConstraint> 
 	get_clock_constraints_from_zone(const Zone_slice &zone, RegionIndex max_region_index);
+
+	/** Checks whether a clock constraint is satisfied by a zone.
+	 * A Zone satisfies a clock constraint if all valuations in the zone satisfy the constraint.
+	 * 
+	 * @param constraint The clock constraint
+	 * @param zone The zone
+	 * @return True if all valuations in the zone satisfy the clock constraint
+	 */
+	bool
+	is_satisfied(const automata::ClockConstraint &constraint, const Zone_slice &zone);
 
 } //namespace tacos::zones
 

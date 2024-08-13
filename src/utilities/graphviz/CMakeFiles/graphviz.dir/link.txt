@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -g -shared -Wl,-soname,libgraphviz.so -o libgraphviz.so CMakeFiles/graphviz.dir/graph.cpp.o CMakeFiles/graphviz.dir/node.cpp.o  -lgvc /usr/lib64/libgvc.so /usr/lib64/libcgraph.so /usr/lib64/libcdt.so 
