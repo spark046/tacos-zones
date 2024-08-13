@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -g -shared -Wl,-soname,libautomata.so -o libautomata.so CMakeFiles/automata.dir/ta.cpp.o CMakeFiles/automata.dir/automata.cpp.o CMakeFiles/automata.dir/ata.cpp.o CMakeFiles/automata.dir/ta_regions.cpp.o CMakeFiles/automata.dir/automata_zones.cpp.o  /usr/lib64/libfmt.so.10.2.1 -ltinyxml2 -lpthread -lfmt 

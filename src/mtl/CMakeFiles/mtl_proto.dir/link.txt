@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -g -shared -Wl,-soname,libmtl_proto.so -o libmtl_proto.so CMakeFiles/mtl_proto.dir/mtl_proto.cpp.o CMakeFiles/mtl_proto.dir/mtl.pb.cc.o  -Wl,-rpath,/home/spark046/Documents/Git/tacos-zones/src/automata: /usr/lib64/libprotobuf.so ../automata/libautomata.so -ltinyxml2 -lpthread /usr/lib64/libfmt.so.10.2.1 -lfmt 

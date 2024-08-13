@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -g -shared -Wl,-soname,libta_proto.so -o libta_proto.so CMakeFiles/ta_proto.dir/ta_proto.cpp.o CMakeFiles/ta_proto.dir/ta.pb.cc.o  -Wl,-rpath,/home/spark046/Documents/Git/tacos-zones/src/automata: /usr/lib64/libprotobuf.so libautomata.so /usr/lib64/libfmt.so.10.2.1 -ltinyxml2 -lpthread -lfmt 

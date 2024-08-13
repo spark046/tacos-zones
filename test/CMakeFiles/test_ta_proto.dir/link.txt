@@ -1,1 +1,0 @@
-/usr/bin/c++ -g CMakeFiles/test_ta_proto.dir/test_ta_proto.cpp.o -o test_ta_proto  -Wl,-rpath,/home/spark046/Documents/Git/tacos-zones/src/automata ../src/automata/libta_proto.so ../_deps/catch2-build/src/libCatch2Maind.a ../src/automata/libautomata.so /usr/lib64/libfmt.so.10.2.1 -ltinyxml2 -lpthread -lfmt /usr/lib64/libprotobuf.so ../_deps/catch2-build/src/libCatch2d.a 
