@@ -38,6 +38,8 @@
 //Bugs with overflow?
 #define ZONE_INFTY 30000
 
+#define USE_INTERACTIVE_VISUALIZATION false
+
 namespace {
 
 using namespace tacos;
@@ -622,12 +624,16 @@ TEST_CASE("Railroad example using zones", "[zones]")
 
 	#if true
 	[[maybe_unused]] const int num_crossings = 2;
-	//char              tmp_filename[] = "search_graph_XXXXXX.svg";
-	//mkstemps(tmp_filename, 4);
-	//std::filesystem::path tmp_file(tmp_filename);
-	//visualization::search_tree_to_graphviz_interactive(search.get_root(), tmp_filename);
-	visualization::search_tree_to_graphviz(*search.get_root(), true)
-	  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
+	#if USE_INTERACTIVE_VISUALIZATION
+		char              tmp_filename[] = "search_graph_XXXXXX.svg";
+		mkstemps(tmp_filename, 4);
+		std::filesystem::path tmp_file(tmp_filename);
+		visualization::search_tree_to_graphviz_interactive(search.get_root(), tmp_filename);
+	#else
+		visualization::search_tree_to_graphviz(*search.get_root(), true)
+		  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
+	#endif
+	
 	visualization::ta_to_graphviz(controller_synthesis::create_controller(
 									search.get_root(), controller_actions, environment_actions, 2),
 								  false)

@@ -168,10 +168,10 @@ public:
 	 * @param z The Zone_slice of the state.
 	 * @return A Minimal Model, which consist of a set of ZoneStates, which have a location and Zone_slice => set::(location, Zone)
 	 */
-	ZoneConfiguration<LocationT>
-	get_a_minimal_model(zones::Zone_slice z) const
+	std::set<ZoneConfiguration<LocationT>>
+	get_minimal_models(zones::Zone_slice z) const
 	{
-		return *formula_->get_minimal_models(z).begin();
+		return formula_->get_minimal_models(z);
 	}
 
 public:

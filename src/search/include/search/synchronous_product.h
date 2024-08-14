@@ -144,27 +144,28 @@ get_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word, 
 	CanonicalABWord<Location, ConstraintSymbolType> res;
 	const RegionIndex                               max_region_index = 2 * K + 1;
 	assert(is_valid_canonical_word(word, max_region_index));
-	// Find the partition that contains all maxed partitions. If it does not exist, create an empty
-	// one.
-	std::set<ABRegionSymbol<Location, ConstraintSymbolType>> new_maxed_partition;
-	auto last_nonmaxed_partition = std::next(word.rbegin());
-	// Check if maxed partition is actually maxed
-	if (std::all_of(word.rbegin()->begin(),
-					word.rbegin()->end(),
-					[&max_region_index](const auto &configuration) {
-						return get_region_index(configuration) == max_region_index;
-					})) {
-		new_maxed_partition = *word.rbegin();
-	} else {
-		// There is no maxed partition, so the last partition is already nonmaxed.
-		last_nonmaxed_partition = word.rbegin();
-	}
-	if (last_nonmaxed_partition == word.rend()) {
-		// All partitions are maxed, nothing to increment.
-		return word;
-	}
 
 	if(is_region_canonical_word(word)) {
+		// Find the partition that contains all maxed partitions. If it does not exist, create an empty
+		// one.
+		std::set<ABRegionSymbol<Location, ConstraintSymbolType>> new_maxed_partition;
+		auto last_nonmaxed_partition = std::next(word.rbegin());
+		// Check if maxed partition is actually maxed
+		if (std::all_of(word.rbegin()->begin(),
+						word.rbegin()->end(),
+						[&max_region_index](const auto &configuration) {
+							return get_region_index(configuration) == max_region_index;
+						})) {
+			new_maxed_partition = *word.rbegin();
+		} else {
+			// There is no maxed partition, so the last partition is already nonmaxed.
+			last_nonmaxed_partition = word.rbegin();
+		}
+		if (last_nonmaxed_partition == word.rend()) {
+			// All partitions are maxed, nothing to increment.
+			return word;
+		}
+
 		const bool has_even_region_index = get_region_index(*word.begin()->begin()) % 2 == 0;
 		// The first set needs to be incremented if its region indexes are even.
 		if (has_even_region_index) {
@@ -198,45 +199,17 @@ get_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word, 
 			}
 			std::reverse_copy(std::next(last_nonmaxed_partition), word.rend(), std::back_inserter(res));
 		}
+
+		// If the maxed partition is non-empty, add it to the resulting word.
+		if (!new_maxed_partition.empty()) {
+			res.push_back(std::move(new_maxed_partition));
+		}
 	} else { //Using zones
-		const bool first_partition_open = get_zone_slice(*word.begin()->begin(), K).lower_isOpen_;
-		if(!first_partition_open) {
-			auto incremented = increment_zones(*word.begin(), max_region_index);
-			std::set<ABRegionSymbol<Location, ConstraintSymbolType>> incremented_nonmaxed;
-			for (auto &configuration : incremented) {
-				if (get_region_index(configuration) == max_region_index) {
-					new_maxed_partition.insert(configuration);
-				} else {
-					incremented_nonmaxed.insert(configuration);
-				}
-			}
-			if (!incremented_nonmaxed.empty()) {
-				res.push_back(std::move(incremented_nonmaxed));
-			}
-			std::reverse_copy(last_nonmaxed_partition, std::prev(word.rend()), std::back_inserter(res));
-		} else {
-			// Increment the last nonmaxed partition. If we have a new maxed configuration, put it into the
-			// maxed partition. Otherwise, keep it in place.
-			auto incremented = increment_zones(*last_nonmaxed_partition, max_region_index);
-			std::set<ABRegionSymbol<Location, ConstraintSymbolType>> incremented_nonmaxed;
-			for (auto &configuration : incremented) {
-				if (get_region_index(configuration) == max_region_index) {
-					new_maxed_partition.insert(configuration);
-				} else {
-					incremented_nonmaxed.insert(configuration);
-				}
-			}
-			if (!incremented_nonmaxed.empty()) {
-				res.push_back(std::move(incremented_nonmaxed));
-			}
-			std::reverse_copy(std::next(last_nonmaxed_partition), word.rend(), std::back_inserter(res));
+		for(const auto &partition : word) {
+			res.push_back(increment_zones(partition, max_region_index));
 		}
 	}
 
-	// If the maxed partition is non-empty, add it to the resulting word.
-	if (!new_maxed_partition.empty()) {
-		res.push_back(std::move(new_maxed_partition));
-	}
 	assert(is_valid_canonical_word(res, max_region_index));
 	return res;
 }
@@ -410,6 +383,12 @@ get_time_successors(
 {
 	std::vector<std::set<CanonicalABWord<Location, ConstraintSymbolType>>> successors;
 	successors.push_back(canonical_words);
+
+	if(is_region_canonical_word(*canonical_words.begin())) {
+		successors.push_back(get_next_time_successors(canonical_words, K));
+		return successors;
+	}
+
 	while (true) {
 		const auto next = get_next_time_successors(successors.back(), K);
 		if (next != successors.back()) {
