@@ -9,6 +9,7 @@
 #pragma once
 
 #include "adapter.h"
+#include "automata/automata.h"
 #include "automata/ata.h"
 #include "automata/ta.h"
 #include "canonical_word.h"
@@ -470,90 +471,39 @@ public:
 		return nodes_;
 	}
 
-	/* //Testing
-	std::set<PlantZoneState<Location>>
-	compute_ta_successor(ActionType symbol,
-						 CanonicalABWord<Location, ConstraintSymbolType> time_successor,
-						 automata::ta::Transition<Location, ActionType>  curr_transition)
+	/** Gets the minimum time that must elapse from 0 until the constraint can be satisfied */
+	RegionIndex
+	get_min_time_to_fulfill_constraint(automata::ClockConstraint constraint)
 	{
-		std::map<std::string, zones::Zone_slice> new_zones = get_canonical_word_zones(time_successor);
+		Endpoint constant = std::visit([](const auto &atomic_clock_constraint)
+						-> Time { return atomic_clock_constraint.get_comparand(); },
+						constraint); //Visit due to ClockConstraint being a variant
 
-		std::set<PlantZoneState<Location>> ta_successors;
-		//0. Check whether this transition is for the current symbol
-		if(curr_transition.symbol_ != symbol) {
-			continue;
+		std::optional<int> relation_opt = automata::get_relation_index(constraint);
+		assert(relation_opt.has_value());
+		int relation = relation_opt.value();
+
+		switch (relation)
+		{
+		case 0: //less
+		case 1: //less_equal
+			return 0; //We don't need to wait at all
+		case 2: //equal_to
+		case 4: //greater_equal
+		case 5: //greater
+			return (RegionIndex) constant; //We need to wait until the constant
+			break;
+		default: //not_equal or other oopsie (We assume inequality constraints don't exist for zones)
+			assert(false);
+			break;
 		}
-
-		//1. Intersect the zone of transition guard and current zone
-		auto clock_constraints = curr_transition.get_guards();
-		for(const auto &clock : ta_->get_clocks()) {
-			auto [curr_constraint, last_constraint] = clock_constraints.equal_range(clock);
-			for(; curr_constraint != last_constraint; curr_constraint++) {
-				new_zones.at(clock).conjunct(curr_constraint->second);
-			}
-		}
-
-		//2. Reset Zones
-		for (const auto &clock : curr_transition.clock_resets_) {
-			new_zones.at(clock).reset();
-		}
-
-		//3. Calculate new Location and insert PlantZoneState to successors
-		for(const auto &clock : ta_->get_clocks()) {
-			ta_successors.insert(PlantZoneState<Location>{curr_transition.target_, clock, new_zones.at(clock)});
-		}
-
-		return ta_successors;
 	}
 
-	//testing
-	std::set<ATAZoneState<ConstraintSymbolType>>
-	compute_ata_successor(ActionType symbol,
-						  CanonicalABWord<Location, ConstraintSymbolType> time_successor,
-						  automata::ata::Transition<logic::MTLFormula<ConstraintSymbolType>, logic::AtomicProposition<ATAInputType>> transition)
-	{
-		using ATAConfiguration = automata::ata::ZoneConfiguration<logic::MTLFormula<ConstraintSymbolType>>;
-
-		std::set<ATAZoneState<ConstraintSymbolType>> ata_successors;
-
-		for(const auto &state : get_ata_symbols_from_canonical_word(time_successor)) {
-			//0. Check whether this transition is for the current symbol
-			if(transition.get_symbol() != logic::AtomicProposition{symbol}) {
-				continue;
-			}
-
-			//1. Intersect Zone for the minimal model
-			auto intersected_zone = state.symbolic_valuation;
-
-			auto clock_constraints = transition.get_clock_constraints();
-			for(const auto &constraint : clock_constraints) {
-				intersected_zone.conjunct(constraint);
-			}
-
-			//Minimal Models for this state and transition
-			ATAConfiguration model = transition.get_a_minimal_model(intersected_zone);
-
-			//The model is empty, i.e. no meaningful transition could be made
-			if(model.empty()) {
-				//Check whether we have sink location or not
-				if(ata_->get_sink_location().has_value()) {
-					ata_successors.insert(ATAZoneState<ConstraintSymbolType>{
-											ata_->get_sink_location().value(), zones::Zone_slice{0, 0, false, false, 2*K_}
-											});
-				}
-				continue;
-			}
-
-			for(const auto &new_state : model) {
-				ata_successors.insert(ATAZoneState<ConstraintSymbolType>{new_state.location, new_state.zone});
-			}
-		}
-
-		return ata_successors;
-	} */
-
 	//Public for testing purposes
-	std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>>
+	std::tuple<
+		std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>>,
+		std::map<ActionType, RegionIndex>
+	>
 	compute_next_canonical_words(const CanonicalABWord<Location, ConstraintSymbolType> &time_successor)
 	{
 		using ATAConfiguration = automata::ata::ZoneConfiguration<logic::MTLFormula<ConstraintSymbolType>>;
@@ -568,6 +518,9 @@ public:
 		//only exactly one new target Configuration)
 
 		std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>> successors;
+
+		//How many steps are needed to take a specific action
+		std::map<ActionType, RegionIndex> needed_increment;
 
 		std::map<std::string, zones::Zone_slice> old_zones = get_canonical_word_zones(time_successor);
 
@@ -601,6 +554,19 @@ public:
 					}
 				}
 
+				//TODO: This kind of assumes the clocks are reset after every step, since we just count from 0 for now...
+				//TODO Also assumes determinate TAs...
+				//We need the order of the transitions to know whether the environment or the controller can act first,
+				//so note down the minimum time that needs to pass in order to take this transition.
+				RegionIndex min_time_to_take = 0;
+
+				for(const auto &constraint : clock_constraints) {
+					RegionIndex local_min_time = get_min_time_to_fulfill_constraint(constraint.second);
+					if(local_min_time > min_time_to_take) {
+						min_time_to_take = local_min_time;
+					}
+				}
+
 				//1.5 Check for empty zones, if a zone is empty, stop considering this transition
 				bool stop_considering = false;
 				for(const auto &clock : ta_->get_clocks()) {
@@ -624,6 +590,15 @@ public:
 				}
 
 				ta_successors.insert((ta_configuration));
+
+				//Note down the needed increment
+				if(needed_increment.count(symbol)) {
+					if(min_time_to_take < needed_increment[symbol]) {
+						needed_increment[symbol] = min_time_to_take;
+					}
+				} else {
+					needed_increment[symbol] = min_time_to_take;
+				}
 			}
 
 			//ATA Transitions
@@ -792,7 +767,7 @@ public:
 			}
 		}
 
-		return successors;
+		return std::make_tuple(successors, needed_increment);
 	}
 
 	std::pair<std::set<Node *>, std::set<Node *>>
@@ -810,6 +785,7 @@ public:
 		for (std::size_t increment = 0; increment < time_successors.size(); ++increment) {
 			for (const auto &time_successor : time_successors[increment]) {
 				std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>> successors;
+				std::map<ActionType, RegionIndex> needed_increments;
 				if(is_region_canonical_word(time_successor)) {
 					successors =
 					  get_next_canonical_words<Plant,
@@ -819,7 +795,7 @@ public:
 					                           use_set_semantics>(controller_actions_, environment_actions_)(
 					    *ta_, *ata_, get_candidate(time_successor), increment, K_, use_zones_);
 				} else { //zones
-					successors = compute_next_canonical_words(time_successor);
+					std::tie(successors, needed_increments) = compute_next_canonical_words(time_successor);
 				}
 				for (const auto &[symbol, successor] : successors) {
 					assert(
@@ -827,7 +803,13 @@ public:
 					    != std::end(controller_actions_)
 					  || std::find(std::begin(environment_actions_), std::end(environment_actions_), symbol)
 					       != std::end(environment_actions_));
-					child_classes[std::make_pair(increment, symbol)].insert(successor);
+
+					//Offset gets multiplied, since if delay is 0, then we don't care about increments at all
+					RegionIndex offset = 1;
+					if(needed_increments.count(symbol)) {
+						offset = needed_increments[symbol] + 1; //Plus 1 since we don't want multiplication by 0
+					}
+					child_classes[std::make_pair(increment * offset, symbol)].insert(successor);
 				}
 			}
 		}

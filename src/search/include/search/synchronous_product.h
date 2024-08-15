@@ -107,9 +107,6 @@ increment_zones(
 						if (std::holds_alternative<PlantZoneState<Location>>(configuration)) {
 							auto &state = std::get<PlantZoneState<Location>>(configuration);
 
-							//TODO: Somehow know the transition to take and only get a subset of these Clock Constraints (Possible? Even Necessary? Hopefully not...)
-							//TODO: Get transitions from automata
-
 							state.increment_valuation(K);
 						} else { //ATAZoneState
 							auto &state = std::get<ATAZoneState<ConstraintSymbolType>>(configuration);
@@ -313,7 +310,6 @@ get_time_successors(const CanonicalABWord<Location, ConstraintSymbolType> &canon
 					
 					RegionIndex                                            K)
 {
-	//TODO: Compute cur_index differently for zones to allow for taking more than one time step at once
 	SPDLOG_TRACE("Computing time successors of {} with K={}", canonical_word, K);
 	auto        cur = get_time_successor(canonical_word, K);
 	RegionIndex cur_index{0};

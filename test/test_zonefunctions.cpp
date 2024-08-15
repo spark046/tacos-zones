@@ -630,7 +630,7 @@ TEST_CASE("Railroad example using zones", "[zones]")
 		std::filesystem::path tmp_file(tmp_filename);
 		visualization::search_tree_to_graphviz_interactive(search.get_root(), tmp_filename);
 	#else
-		visualization::search_tree_to_graphviz(*search.get_root(), true)
+		visualization::search_tree_to_graphviz(*search.get_root(), false)
 		  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
 	#endif
 	

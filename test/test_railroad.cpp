@@ -26,6 +26,7 @@
 #include "search/ta_adapter.h"
 #include "visualization/ta_to_graphviz.h"
 #include "visualization/tree_to_graphviz.h"
+#include "visualization/interactive_tree_to_graphviz.h"
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -137,8 +138,10 @@ TEST_CASE("Railroad crossing benchmark", "[.benchmark][railroad]")
 		search.build_tree(true);
 		CHECK(search.get_root()->label == NodeLabel::TOP);
 #ifdef HAVE_VISUALIZATION
-		visualization::search_tree_to_graphviz(*search.get_root(), true)
-		  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
+		char              tmp_filename[] = "search_graph_XXXXXX.svg";
+		mkstemps(tmp_filename, 4);
+		std::filesystem::path tmp_file(tmp_filename);
+		visualization::search_tree_to_graphviz_interactive(search.get_root(), tmp_filename);
 		visualization::ta_to_graphviz(controller_synthesis::create_controller(
 		                                search.get_root(), controller_actions, environment_actions, 2),
 		                              false)
