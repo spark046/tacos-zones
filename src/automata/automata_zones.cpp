@@ -3,6 +3,124 @@
 
 namespace tacos::zones {
 
+	Zone_slice
+	Zone_DBM::get_zone_slice(std::string clock)
+	{
+		Zone_slice ret{0, 0, false, false, max_constant_};
+
+		const DBM_Entry &lower_bound = graph_.get(0, clock);
+		const DBM_Entry &upper_bound = graph_.get(clock, 0);
+
+		ret.lower_bound_ = (Endpoint) -lower_bound.value_;
+		ret.lower_isOpen_ = !lower_bound.non_strict_;
+
+		ret.upper_bound_ = (Endpoint) upper_bound.value_;
+		ret.upper_isOpen_ = !upper_bound.non_strict_;
+
+		if(lower_bound.infinity_) {
+			ret.lower_bound_ = max_constant_;
+			ret.lower_isOpen_ = true;
+		}
+
+		if(upper_bound.infinity_) {
+			ret.upper_bound_ = max_constant_;
+			ret.upper_isOpen_ = false;
+		}
+
+		return ret;
+	}
+
+	void
+	Zone_DBM::delay()
+	{
+		for(std::size_t i = 1; i < graph_.size(); i++) {
+			graph_.get(i, 0).infinity_ = true;
+		}
+	}
+
+	void
+	Zone_DBM::reset(std::string clock)
+	{
+		std::size_t index = graph_.get_index_of_clock(clock);
+
+		for(std::size_t i = 0; i < graph_.size(); i++) {
+			graph_.get(index, i) = DBM_Entry{0, true} + graph_.get(0, i);
+			graph_.get(i, index) = graph_.get(i, 0) + DBM_Entry{0, true};
+		}
+	}
+
+	void
+	Zone_DBM::conjunct(std::string clock, automata::ClockConstraint clock_constraint)
+	{
+		std::size_t index = graph_.get_index_of_clock(clock);
+
+		DBM_Entry lower_entry{true, 0, true};
+		DBM_Entry upper_entry{true, (int) 	max_constant_, true};
+
+		int constant = (int) std::visit([](const auto &atomic_clock_constraint)
+						-> Time { return atomic_clock_constraint.get_comparand(); },
+						clock_constraint); //Visit due to ClockConstraint being a variant
+
+		std::optional<int> relation_opt = automata::get_relation_index(clock_constraint);
+		assert(relation_opt.has_value());
+		int relation = relation_opt.value();
+
+		switch (relation)
+		{
+		case 0: //less
+			upper_entry.infinity_ = false;
+			upper_entry.value_ = constant;
+			upper_entry.non_strict_ = false;
+			break;
+		case 1: //less_equal
+			upper_entry.infinity_ = false;
+			upper_entry.value_ = constant;
+			upper_entry.non_strict_ = true;
+			break;
+		case 2: //equal_to
+			lower_entry.infinity_ = false;
+			lower_entry.value_ = -constant;
+			lower_entry.non_strict_ = true;
+
+			upper_entry.infinity_ = false;
+			upper_entry.value_ = constant;
+			upper_entry.non_strict_ = true;
+			break;
+		case 4: //greater_equal
+			lower_entry.infinity_ = false;
+			lower_entry.value_ = -constant;
+			lower_entry.non_strict_ = true;
+			break;
+		case 5: //greater
+			lower_entry.infinity_ = false;
+			lower_entry.value_ = -constant;
+			lower_entry.non_strict_ = false;
+			break;
+		default: //not_equal or other oopsie (We assume inequality constraints don't exist for zones)
+			assert(false);
+			break;
+		}
+
+		//Apply the algorithm on lower_entry and also upper_entry
+		and_func(index, 0, lower_entry);
+		and_func(0, index, upper_entry);
+
+		clock_zones_.at(clock) = get_zone_slice(clock);
+	}
+
+	void
+	Zone_DBM::conjunct(std::multimap<std::string, automata::ClockConstraint> clock_constraints) {
+		for(auto iter1 = clock_constraints.begin(); iter1 != clock_constraints.end(); iter1++) {
+			conjunct(iter1->first, iter1->second);
+		}
+	}
+
+	bool
+	Zone_DBM::is_consistent()
+	{
+		return graph_.get(0, 0).value_ >= 0;
+	}
+
 	std::multimap<std::string, automata::ClockConstraint>
 	get_fulfilled_clock_constraints(const std::multimap<std::string, automata::ClockConstraint> allConstraints, std::string clock, ClockValuation val) {
 		if(allConstraints.empty()) {
