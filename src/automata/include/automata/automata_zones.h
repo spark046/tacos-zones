@@ -287,7 +287,10 @@ namespace tacos::zones {
 		 * 
 		 * TODO This might end up wasting space when using the region construction, but should be negligablesd
 		 */
-		Zone_DBM();
+		Zone_DBM()
+		{
+
+		}
 
 		/** Construct the initial Zone Difference Bound Matrix (DBM) for the given clocks.
 		 * This will be a graph with |clocks|+1 many vertices.
@@ -299,7 +302,10 @@ namespace tacos::zones {
 			graph_ = Graph(clocks);
 
 			for(const auto &clock : clocks) {
-				clock_zones_.at(clock) = get_zone_slice(clock);
+				if(!(clock_zones_.insert( {clock, get_zone_slice(clock)} ).second)) {
+					//Collison, i.e. item already exists
+					clock_zones_.at(clock) =  get_zone_slice(clock);
+				}
 			}
 		}
 
@@ -350,6 +356,9 @@ namespace tacos::zones {
 		 * @param clock_constraints The clock constraints to change the DBM with
 		 */
 		void conjunct(std::multimap<std::string, automata::ClockConstraint> clock_constraints);
+
+		/** Normalize this DBM according to max_constant_ */
+		void normalize();
 
 		/** Check whether this zone is consistent, i.e. it has no empty sets.
 		 * 
@@ -448,7 +457,10 @@ namespace tacos::zones {
 					fractional_part = -fractional_part;
 				}
 
+				result = result * 2;
 				result = result + fractional_part;
+
+				assert(result >= 0);
 
 				return (RegionIndex) result;
 			}
@@ -500,7 +512,10 @@ namespace tacos::zones {
 		{
 			public:
 			/** Default Constructor with no clocks so also an empty Matrix */
-			Graph();
+			Graph()
+			{
+
+			}
 
 			/** Constructs a new Graph for this set of clocks. Each edge is labeled with infinity */
 			Graph(std::set<std::string> clocks) {
@@ -520,7 +535,10 @@ namespace tacos::zones {
 			{
 				public:
 				/** Default Constructor with empty vector */
-				Matrix();
+				Matrix()
+				{
+
+				}
 
 				Matrix(std::size_t size)
 				{

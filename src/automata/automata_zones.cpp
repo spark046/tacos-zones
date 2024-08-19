@@ -55,7 +55,7 @@ namespace tacos::zones {
 		std::size_t index = graph_.get_index_of_clock(clock);
 
 		DBM_Entry lower_entry{true, 0, true};
-		DBM_Entry upper_entry{true, (int) 	max_constant_, true};
+		DBM_Entry upper_entry{true, (int) max_constant_, true};
 
 		int constant = (int) std::visit([](const auto &atomic_clock_constraint)
 						-> Time { return atomic_clock_constraint.get_comparand(); },
@@ -105,13 +105,28 @@ namespace tacos::zones {
 		and_func(index, 0, lower_entry);
 		and_func(0, index, upper_entry);
 
-		clock_zones_.at(clock) = get_zone_slice(clock);
+		if(!(clock_zones_.insert( {clock, get_zone_slice(clock)} ).second)) {
+			//Collison, i.e. item already exists
+			clock_zones_.at(clock) = get_zone_slice(clock);
+		}
 	}
 
 	void
 	Zone_DBM::conjunct(std::multimap<std::string, automata::ClockConstraint> clock_constraints) {
 		for(auto iter1 = clock_constraints.begin(); iter1 != clock_constraints.end(); iter1++) {
 			conjunct(iter1->first, iter1->second);
+		}
+	}
+
+	void
+	Zone_DBM::normalize()
+	{
+		for(std::size_t i = 0; i < graph_.size(); i++) {
+			for(std::size_t j = 0; j < graph_.size(); j++) {
+				if(!graph_.get(i, j).infinity_ && DBM_Entry{(int) max_constant_, true} < graph_.get(i, j)) {
+					graph_.get(i, j).infinity_ = true;
+				}
+			}
 		}
 	}
 
@@ -130,7 +145,7 @@ namespace tacos::zones {
 		for(std::size_t i = 0; i < graph_.size(); i++) {
 			for(std::size_t j = 0; j < graph_.size(); j++) {
 				RegionIndex difference = graph_.get(i, j) - new_dbm.graph_.get(i, j);
-				if(difference != 0 && new_dbm.graph_.get(i, j) != DBM_Entry{0, true}) {
+				if(difference != 0 && graph_.get(i, j) != DBM_Entry{0, true}) {
 					if(difference > largest_difference) {
 						largest_difference = difference;
 					}

@@ -507,7 +507,7 @@ public:
 		std::map<ActionType, RegionIndex>,
 		std::map<ActionType, zones::Zone_DBM>
 	>
-	compute_next_canonical_words(const CanonicalABWord<Location, ConstraintSymbolType> &time_successor, const zones::Zone_DBM &old_dbm)
+	compute_next_canonical_words(const CanonicalABWord<Location, ConstraintSymbolType> &time_successor, const zones::Zone_DBM &old_dbm, bool delay)
 	{
 		using ATAConfiguration = automata::ata::ZoneConfiguration<logic::MTLFormula<ConstraintSymbolType>>;
 		//TODO I think for Golog plants the weird thing for adapters is still necessary, so add a zone adapter or something
@@ -528,13 +528,15 @@ public:
 		//The new DBMs for each Action
 		std::map<ActionType, zones::Zone_DBM> new_dbm;
 
-		std::map<std::string, zones::Zone_slice> old_zones = get_canonical_word_zones(time_successor);
-
 		for(const auto &symbol : ta_->get_alphabet()) {
 
 			Location location = get_canonical_word_ta_location(time_successor);
 
-			new_dbm[symbol] = old_dbm;
+			assert(new_dbm.insert( {symbol, old_dbm} ).second);
+
+			if(delay) {
+				new_dbm.at(symbol).delay();
+			}
 
 			//Set of configurations, i.e. set of sets of states
 			std::set<std::set<PlantZoneState<Location>>> ta_successors;
@@ -546,7 +548,6 @@ public:
 			auto [curr_transition, last_transition] = ta_->get_transitions().equal_range(location);
 			for(; curr_transition != last_transition; curr_transition++) {
 				std::set<PlantZoneState<Location>> ta_configuration;
-				std::map<std::string, zones::Zone_slice> new_zones = old_zones;
 
 				//0. Check whether this transition is for the current symbol
 				if(curr_transition->second.symbol_ != symbol) {
@@ -558,7 +559,6 @@ public:
 				for(const auto &clock : ta_->get_clocks()) {
 					auto [curr_constraint, last_constraint] = clock_constraints.equal_range(clock);
 					for(; curr_constraint != last_constraint; curr_constraint++) {
-						new_zones.at(clock).conjunct(curr_constraint->second);
 						new_dbm[symbol].conjunct(clock, curr_constraint->second);
 					}
 				}
@@ -576,28 +576,22 @@ public:
 				//	}
 				//}
 
-				//1.5 Check for empty zones, if a zone is empty, stop considering this transition
-				bool stop_considering = false;
-				for(const auto &clock : ta_->get_clocks()) {
-					if(new_zones.at(clock).is_empty()) {
-						stop_considering = true;
-					}
-				}
-				if(stop_considering || !new_dbm[symbol].is_consistent()) {
-					continue;
-				}
+				//1.5 Check for empty zones, if a zone is empty, stop considering this transitionf
 
 				//2. Reset Zones
 				for (const auto &clock : curr_transition->second.clock_resets_) {
 					//Do not reset empty clocks as they are invalid or something
-					new_zones.at(clock).reset();
 					new_dbm[symbol].reset(clock);
 				}
 
 				//3. Calculate new Location and insert PlantZoneState to successors
 				for(const auto &clock : ta_->get_clocks()) {
-					ta_configuration.insert(PlantZoneState<Location>{curr_transition->second.target_, clock, new_zones.at(clock)});
+					ta_configuration.insert(PlantZoneState<Location>{curr_transition->second.target_, clock,
+																	 new_dbm.at(symbol).clock_zones_.at(clock)
+																	});
 				}
+
+				new_dbm.at(symbol).normalize();
 
 				ta_successors.insert((ta_configuration));
 
@@ -808,7 +802,7 @@ public:
 					                           use_set_semantics>(controller_actions_, environment_actions_)(
 					    *ta_, *ata_, get_candidate(time_successor), increment, K_, use_zones_);
 				} else { //zones
-					std::tie(successors, needed_increments, new_dbm) = compute_next_canonical_words(time_successor, node->dbm_);
+					std::tie(successors, needed_increments, new_dbm) = compute_next_canonical_words(time_successor, node->dbm_, increment > 0);
 				}
 				for (const auto &[symbol, successor] : successors) {
 					assert(
