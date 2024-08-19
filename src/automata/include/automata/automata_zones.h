@@ -21,6 +21,8 @@
 
 #include <limits>
 
+#define ZONE_INFTY 30000
+
 namespace tacos::zones {
 
 	/**
@@ -321,6 +323,47 @@ namespace tacos::zones {
 			conjunct(clock_constraints);
 		}
 
+		/** Get the Zone_slice of this clock */
+		Zone_slice get_zone_slice(std::string clock);
+
+		/** Delays a DBM. Every Entry at graph_.get(i, 0) is set to infinity */
+		void delay();
+
+		/** Resets a clock back to zero. The canonical form is preserved
+		 * 
+		 * @param clock The clock to reset to zero
+		 */
+		void reset(std::string clock);
+
+		/** Conjuncts this DBM with a clock constraint
+		 * 
+		 * If the DBM stops being in canonical form because of this, it is put back in line as well.
+		 * 
+		 * @param constraint The clock constraint to change the DBM with
+		 */
+		void conjunct(std::string clock, automata::ClockConstraint constraint);
+
+		/** Conjuncts this DBM with a multimap of clock constraints
+		 * 
+		 * If the DBM stops being in canonical form because of this, it is put back in line as well.
+		 * 
+		 * @param clock_constraints The clock constraints to change the DBM with
+		 */
+		void conjunct(std::multimap<std::string, automata::ClockConstraint> clock_constraints);
+
+		/** Check whether this zone is consistent, i.e. it has no empty sets.
+		 * 
+		 * This is accomplished by always marking inconsistent DBMs with a negative value at D_00
+		 */
+		bool is_consistent();
+
+		/** Calculates the increment needed in order to reach the new DBM.
+		 * 
+		 * @param new_dbm The new DBM that is supposed to be reached
+		 * @return The needed increment as a Region Index
+		 */
+		RegionIndex get_increment(Zone_DBM new_dbm);
+
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~HELPING CLASSES~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		private:
 		/** Entry within the Adjacency Matrix, i.e. this is the type for the edge weights */
@@ -367,6 +410,47 @@ namespace tacos::zones {
 				result.non_strict_ = result.non_strict_ && s2.non_strict_;
 
 				return result;
+			}
+
+			/** Finds the magnitude of the difference between two entries in the form of a RegionIndex
+			 * (i.e. the result which might have fractional part is regionalized)
+			 * 
+			 * Subtracting (from) infinity will always result in infinity, so the max Region Index is taken.
+			 * The values are subtracted normally
+			 * 
+			 * Strictness is subtracted like:
+			 * <= - <= is 0
+			 * <= - <  is 1
+			 * < + <=  is -1
+			 * < + <   is 0
+			*/
+			RegionIndex
+			operator-(const DBM_Entry &s2) const
+			{
+				int result = 0; //Signed integer since negative numbers will be involved in calculation
+
+				if(s2.infinity_) {
+					result = ZONE_INFTY; //TODO Need better way to handle infinity
+					return result;
+				}
+
+				int fractional_part = 0; //either -1, 0, or 1 to represent -0.1, 0, and +0.1 to the real number
+				result = value_ - s2.value_;
+				if(non_strict_ != s2.non_strict_) {
+					if(non_strict_) { //case:  <= - <
+						fractional_part = 1;
+					} else { //case: < - <=
+						fractional_part = -1;
+					}
+				}
+				if(result < 0) {
+					result = -result;
+					fractional_part = -fractional_part;
+				}
+
+				result = result + fractional_part;
+
+				return (RegionIndex) result;
 			}
 
 			/** Compare two DBM Entries.
@@ -566,45 +650,11 @@ namespace tacos::zones {
 		}
 
 		public:
-
-		/** Get the Zone_slice of this clock */
-		Zone_slice get_zone_slice(std::string clock);
-
-		/** Delays a DBM. Every Entry at graph_.get(i, 0) is set to infinity */
-		void delay();
-
-		/** Resets a clock back to zero. The canonical form is preserved
-		 * 
-		 * @param clock The clock to reset to zero
-		 */
-		void reset(std::string clock);
-
-		/** Conjuncts this DBM with a clock constraint
-		 * 
-		 * If the DBM stops being in canonical form because of this, it is put back in line as well.
-		 * 
-		 * @param constraint The clock constraint to change the DBM with
-		 */
-		void conjunct(std::string clock, automata::ClockConstraint constraint);
-
-		/** Conjuncts this DBM with a multimap of clock constraints
-		 * 
-		 * If the DBM stops being in canonical form because of this, it is put back in line as well.
-		 * 
-		 * @param clock_constraints The clock constraints to change the DBM with
-		 */
-		void conjunct(std::multimap<std::string, automata::ClockConstraint> clock_constraints);
-
-		/** Check whether this zone is consistent, i.e. it has no empty sets.
-		 * 
-		 * This is accomplished by always marking inconsistent DBMs with a negative value at D_00
-		 */
-		bool is_consistent();
-
 		//The specific zone of all the clocks (clocks encoded as string)
 		std::map<std::string, Zone_slice> clock_zones_;
 		//Max constant that may appear in any zone
 		Endpoint max_constant_;
+
 		private:
 		Graph graph_;
 	};

@@ -75,6 +75,25 @@ public:
 		}));
 	}
 
+	/** Construct a node with zones.
+	 * @param words The CanonicalABWords of the node (being of the same reg_a class)
+	 * @param zone The zones of this node encoded as a Difference Bound Matrix
+	 */
+	SearchTreeNode(const std::set<CanonicalABWord<Location, ConstraintSymbolType>> &words, const zones::Zone_DBM &zone)
+	: words(words), dbm_(zone)
+	{
+		// The constraints must be either over locations or over actions.
+		static_assert(std::is_same_v<Location, ConstraintSymbolType>
+		              || std::is_same_v<ActionType, ConstraintSymbolType>);
+		// All words must have the same reg_a.
+		assert(std::all_of(std::begin(words), std::end(words), [&words](const auto &word) {
+			return words.empty() || reg_a(*std::begin(words)) == reg_a(word);
+		}));
+		//Zone must be consistent
+		//TODO is_consistent can't be const due to weird c++ thingy
+		//assert(zone.is_consistent());
+	}
+
 	/** @brief Set the node label and optionally cancel the children.
 	 * @param new_label The new node label
 	 * @param cancel_children If true, cancel children after setting the node label
@@ -305,6 +324,8 @@ public:
 	LabelReason label_reason = LabelReason::UNKNOWN;
 	/** The current regionalized minimal total time to reach this node */
 	RegionIndex min_total_region_increments = std::numeric_limits<RegionIndex>::max();
+	/** The current zone of this node if it uses zones */
+	zones::Zone_DBM dbm_;
 
 private:
 	/** A list of the children of the node, which are reachable by a single transition */

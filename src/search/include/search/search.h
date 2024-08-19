@@ -273,6 +273,8 @@ public:
 			                       K,
 								   true,
 								   clock_constraints)});
+
+			tree_root_->dbm_ = zones::Zone_DBM{clock_constraints, K};
 		} else {
 			tree_root_ = std::make_shared<Node>(
 			  std::set<CanonicalABWord<typename Plant::Location, ConstraintSymbolType>>{
@@ -502,9 +504,10 @@ public:
 	//Public for testing purposes
 	std::tuple<
 		std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>>,
-		std::map<ActionType, RegionIndex>
+		std::map<ActionType, RegionIndex>,
+		std::map<ActionType, zones::Zone_DBM>
 	>
-	compute_next_canonical_words(const CanonicalABWord<Location, ConstraintSymbolType> &time_successor)
+	compute_next_canonical_words(const CanonicalABWord<Location, ConstraintSymbolType> &time_successor, const zones::Zone_DBM &old_dbm)
 	{
 		using ATAConfiguration = automata::ata::ZoneConfiguration<logic::MTLFormula<ConstraintSymbolType>>;
 		//TODO I think for Golog plants the weird thing for adapters is still necessary, so add a zone adapter or something
@@ -522,11 +525,16 @@ public:
 		//How many steps are needed to take a specific action
 		std::map<ActionType, RegionIndex> needed_increment;
 
+		//The new DBMs for each Action
+		std::map<ActionType, zones::Zone_DBM> new_dbm;
+
 		std::map<std::string, zones::Zone_slice> old_zones = get_canonical_word_zones(time_successor);
 
 		for(const auto &symbol : ta_->get_alphabet()) {
 
 			Location location = get_canonical_word_ta_location(time_successor);
+
+			new_dbm[symbol] = old_dbm;
 
 			//Set of configurations, i.e. set of sets of states
 			std::set<std::set<PlantZoneState<Location>>> ta_successors;
@@ -551,6 +559,7 @@ public:
 					auto [curr_constraint, last_constraint] = clock_constraints.equal_range(clock);
 					for(; curr_constraint != last_constraint; curr_constraint++) {
 						new_zones.at(clock).conjunct(curr_constraint->second);
+						new_dbm[symbol].conjunct(clock, curr_constraint->second);
 					}
 				}
 
@@ -558,14 +567,14 @@ public:
 				//TODO Also assumes determinate TAs...
 				//We need the order of the transitions to know whether the environment or the controller can act first,
 				//so note down the minimum time that needs to pass in order to take this transition.
-				RegionIndex min_time_to_take = 0;
-
-				for(const auto &constraint : clock_constraints) {
-					RegionIndex local_min_time = get_min_time_to_fulfill_constraint(constraint.second);
-					if(local_min_time > min_time_to_take) {
-						min_time_to_take = local_min_time;
-					}
-				}
+				//RegionIndex min_time_to_take = 0;
+				//
+				//for(const auto &constraint : clock_constraints) {
+				//	RegionIndex local_min_time = get_min_time_to_fulfill_constraint(constraint.second);
+				//	if(local_min_time > min_time_to_take) {
+				//		min_time_to_take = local_min_time;
+				//	}
+				//}
 
 				//1.5 Check for empty zones, if a zone is empty, stop considering this transition
 				bool stop_considering = false;
@@ -574,7 +583,7 @@ public:
 						stop_considering = true;
 					}
 				}
-				if(stop_considering) {
+				if(stop_considering || !new_dbm[symbol].is_consistent()) {
 					continue;
 				}
 
@@ -582,6 +591,7 @@ public:
 				for (const auto &clock : curr_transition->second.clock_resets_) {
 					//Do not reset empty clocks as they are invalid or something
 					new_zones.at(clock).reset();
+					new_dbm[symbol].reset(clock);
 				}
 
 				//3. Calculate new Location and insert PlantZoneState to successors
@@ -592,13 +602,13 @@ public:
 				ta_successors.insert((ta_configuration));
 
 				//Note down the needed increment
-				if(needed_increment.count(symbol)) {
-					if(min_time_to_take < needed_increment[symbol]) {
-						needed_increment[symbol] = min_time_to_take;
-					}
-				} else {
-					needed_increment[symbol] = min_time_to_take;
-				}
+				//if(needed_increment.count(symbol)) {
+				//	if(min_time_to_take < needed_increment[symbol]) {
+				//		needed_increment[symbol] = min_time_to_take;
+				//	}
+				//} else {
+				//	needed_increment[symbol] = min_time_to_take;
+				//}
 			}
 
 			//ATA Transitions
@@ -763,11 +773,13 @@ public:
 
 					//Insert New Word
 					successors.insert( {symbol, new_word});
+
+					needed_increment[symbol] = new_dbm[symbol].get_increment(old_dbm); //new_dbm calls since old_dbm is const, shouldn't matter
 				}
 			}
 		}
 
-		return std::make_tuple(successors, needed_increment);
+		return std::make_tuple(successors, needed_increment, new_dbm);
 	}
 
 	std::pair<std::set<Node *>, std::set<Node *>>
@@ -780,6 +792,7 @@ public:
 		std::map<std::pair<RegionIndex, ActionType>,
 		         std::set<CanonicalABWord<Location, ConstraintSymbolType>>>
 		  child_classes;
+		std::map<ActionType, zones::Zone_DBM> new_dbm;
 
 		const auto time_successors = get_time_successors(node->words, K_);
 		for (std::size_t increment = 0; increment < time_successors.size(); ++increment) {
@@ -795,7 +808,7 @@ public:
 					                           use_set_semantics>(controller_actions_, environment_actions_)(
 					    *ta_, *ata_, get_candidate(time_successor), increment, K_, use_zones_);
 				} else { //zones
-					std::tie(successors, needed_increments) = compute_next_canonical_words(time_successor);
+					std::tie(successors, needed_increments, new_dbm) = compute_next_canonical_words(time_successor, node->dbm_);
 				}
 				for (const auto &[symbol, successor] : successors) {
 					assert(
@@ -821,7 +834,7 @@ public:
 		{
 			std::lock_guard lock{nodes_mutex_};
 			for (const auto &[timed_action, words] : child_classes) {
-				auto [child_it, is_new] = nodes_.insert({words, std::make_shared<Node>(words)});
+				auto [child_it, is_new] = nodes_.insert({words, std::make_shared<Node>(words, new_dbm[timed_action.second])});
 				const std::shared_ptr<Node> &child_ptr = child_it->second;
 				node->add_child(timed_action, child_ptr);
 				SPDLOG_TRACE("Action ({}, {}): Adding child {}",

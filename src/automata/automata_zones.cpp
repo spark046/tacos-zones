@@ -121,6 +121,26 @@ namespace tacos::zones {
 		return graph_.get(0, 0).value_ >= 0;
 	}
 
+	RegionIndex
+	Zone_DBM::get_increment(Zone_DBM new_dbm)
+	{
+		//Find the largest difference in magnitude, unless it is of a clock that has been reset.
+		RegionIndex largest_difference = 0;
+
+		for(std::size_t i = 0; i < graph_.size(); i++) {
+			for(std::size_t j = 0; j < graph_.size(); j++) {
+				RegionIndex difference = graph_.get(i, j) - new_dbm.graph_.get(i, j);
+				if(difference != 0 && new_dbm.graph_.get(i, j) != DBM_Entry{0, true}) {
+					if(difference > largest_difference) {
+						largest_difference = difference;
+					}
+				}
+			}
+		}
+
+		return largest_difference;
+	}
+
 	std::multimap<std::string, automata::ClockConstraint>
 	get_fulfilled_clock_constraints(const std::multimap<std::string, automata::ClockConstraint> allConstraints, std::string clock, ClockValuation val) {
 		if(allConstraints.empty()) {
