@@ -428,6 +428,8 @@ TEST_CASE("Difference Bound Matrix tests", "[zones]")
 
 		Zone_DBM new_dbm{clocks, 5};
 
+		INFO(new_dbm);
+
 		CHECK(new_dbm.get_zone_slice("x") == zones::Zone_slice{0, 5, false, false, 5});
 		CHECK(new_dbm.get_zone_slice("y") == zones::Zone_slice{0, 5, false, false, 5});
 		CHECK(new_dbm.get_zone_slice("z") == zones::Zone_slice{0, 5, false, false, 5});
@@ -601,7 +603,7 @@ TEST_CASE("Railroad example using zones", "[zones]")
 		std::filesystem::path tmp_file(tmp_filename);
 		visualization::search_tree_to_graphviz_interactive(search.get_root(), tmp_filename);
 	#else
-		visualization::search_tree_to_graphviz(*search.get_root(), true)
+		visualization::search_tree_to_graphviz(*search.get_root(), false)
 		  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
 	#endif
 	

@@ -532,7 +532,8 @@ public:
 
 			Location location = get_canonical_word_ta_location(time_successor);
 
-			[[maybe_unused]] bool sanity_check = new_dbm.insert( {symbol, old_dbm} ).second;
+			[[maybe_unused]] bool sanity_check =
+			new_dbm.insert( {symbol, old_dbm} ).second;
 
 			assert(sanity_check);
 

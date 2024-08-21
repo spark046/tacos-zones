@@ -80,12 +80,13 @@ add_search_node_to_graph(
 		words_labels.push_back(fmt::format("{{ {} }}", fmt::join(word_labels, " | ")));
 	}
 
-	std::string dbm_matrix;
-	{
-		std::stringstream s;
-		s << search_node->dbm_;
-		dbm_matrix = s.str();
-	}
+	//TODO: Trying to display the DBM takes a lot of space, and doesn't even work 100% of the time
+	//std::string dbm_matrix;
+	//{
+	//	std::stringstream s;
+	//	s << search_node->dbm_;
+	//	dbm_matrix = s.str();
+	//}
 
 	std::string label_reason;
 	switch (search_node->label_reason) {
@@ -102,10 +103,10 @@ add_search_node_to_graph(
 	case LabelReason::BAD_ENV_ACTION_FIRST: label_reason = "bad env action first"; break;
 	case LabelReason::ALL_CONTROLLER_ACTIONS_BAD: label_reason = "all ctl actions bad"; break;
 	}
-	const std::string node_id = fmt::format("{} | {} | {}", program_label, fmt::join(words_labels, " | "), dbm_matrix);
+	const std::string node_id = fmt::format("{} | {}", program_label, fmt::join(words_labels, " | "));
 	const bool        new_node     = !graph->has_node(node_id);
 	utilities::graphviz::Node node = graph->get_node(node_id).value_or(graph->add_node(
-	  fmt::format("{} | {} | {} | {}", label_reason, program_label, fmt::join(words_labels, " | "), dbm_matrix),
+	  fmt::format("{} | {} | {}", label_reason, program_label, fmt::join(words_labels, " | ")),
 	  node_id));
 	// Set the node color according to its label.
 	if (search_node->label == search::NodeLabel::TOP) {

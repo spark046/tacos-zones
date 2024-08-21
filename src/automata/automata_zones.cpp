@@ -57,12 +57,16 @@ namespace tacos::zones {
 	void
 	Zone_DBM::reset(std::string clock)
 	{
+		assert((graph_.get(0,0) == DBM_Entry{0, true}));
+
 		std::size_t index = graph_.get_index_of_clock(clock);
 
 		for(std::size_t i = 0; i < graph_.size(); i++) {
 			graph_.get(index, i) = DBM_Entry{0, true} + graph_.get(0, i);
 			graph_.get(i, index) = graph_.get(i, 0) + DBM_Entry{0, true};
 		}
+
+		assert((graph_.get(0, index) == DBM_Entry{0, true}) && (graph_.get(index, 0) == DBM_Entry{0, true}));
 
 		normalize();
 	}
@@ -158,7 +162,7 @@ namespace tacos::zones {
 	bool
 	Zone_DBM::is_consistent()
 	{
-		return graph_.get(0, 0).value_ == 0;
+		return graph_.get(0, 0) == DBM_Entry{0, true};
 	}
 
 	RegionIndex
@@ -170,7 +174,7 @@ namespace tacos::zones {
 		for(std::size_t i = 0; i < graph_.size(); i++) {
 			for(std::size_t j = 0; j < graph_.size(); j++) {
 				RegionIndex difference = new_dbm.graph_.get(i, j) - graph_.get_value(i, j);
-				if(difference != 0 && graph_.get_value(i, j) != DBM_Entry{0, true}) {
+				if(difference != 0 && new_dbm.graph_.get_value(i, j) != DBM_Entry{0, true}) {
 					if(difference > largest_difference) {
 						largest_difference = difference;
 					}
@@ -257,6 +261,54 @@ namespace tacos::zones {
 				}
 			}
 		}
+	}
+
+	RegionIndex
+	DBM_Entry::operator-(const DBM_Entry &s2) const
+	{
+		if(infinity_ || s2.infinity_) {
+			return 0;
+		}
+
+		RegionIndex result = 0; //Signed integer since negative numbers will be involved in calculation
+		
+		//1. Calculate fractional parts of LHS and RHS
+		//(e.g. < -1 means > 1, so fractional part is: +0.1, while < 1 means fractional part is: -0.1, and for <= fractional part is always 0)
+		int fractional_lhs = 0;
+		if(!non_strict_) {
+			if(value_ < 0) {
+				fractional_lhs = 1;
+			} else {
+				fractional_lhs = -1;
+			}
+		}
+
+		int fractional_rhs = 0;
+		if(!s2.non_strict_) {
+			if(s2.value_ < 0) {
+				fractional_rhs = 1;
+			} else {
+				fractional_rhs = -1;
+			}
+		}
+
+		//2. Calculate integer difference
+		if(s2.value_ > value_) {
+			result = (RegionIndex) 2*(s2.value_ - value_);
+		} else {
+			result = (RegionIndex) 2*(value_ - s2.value_);
+		}
+
+		//3. Apply fractional part difference
+		if(fractional_lhs != fractional_rhs) { //If both fractional parts are the same, they cancel each other out
+			if(fractional_lhs == 0 || fractional_rhs == 0) { //If one fractional part is 0, then we just go from an integer region to a fractional region
+				result += 1;
+			} else { //We have a combination of +1 and -1, so difference is 2 regions, as we go from fractional to integer back to fractional
+				result += 2;
+			}
+		}
+
+		return result;
 	}
 
 	std::multimap<std::string, automata::ClockConstraint>
