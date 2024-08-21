@@ -21,8 +21,6 @@
 
 #include <limits>
 
-#define ZONE_INFTY 30000
-
 namespace tacos::zones {
 
 	/**
@@ -271,6 +269,273 @@ namespace tacos::zones {
 		}
 	};
 
+	/** Entry within the Adjacency Matrix, i.e. this is the type for the edge weights */
+	struct DBM_Entry
+	{
+		bool infinity_; //Whether this entry is supposed to be infinity. If this is true, the rest is essentially ignored
+		int value_; //Value. Unlike Endpoints this can be positive or negative
+		bool non_strict_; //i.e. true means <=, while false means <
+
+		DBM_Entry(bool infty, int value, bool non_strict) : 
+		infinity_(infty), value_(value), non_strict_(non_strict)
+		{
+			// :)
+		}
+
+		DBM_Entry(int value, bool non_strict) : 
+		infinity_(false), value_(value), non_strict_(non_strict)
+		{
+			// :)
+		}
+
+		/** Adds another Entry to this entry 
+		 * 
+		 * Adding infinity will always result in infinity.
+		 * Otherwise the values are added together normally.
+		 * 
+		 * Strictness is added like:
+		 * <= + <= is <=
+		 * <= + <  is <
+		 * < + <=  is <
+		 * < + <   is <
+		*/
+		DBM_Entry
+		operator+(const DBM_Entry &s2) const
+		{
+			DBM_Entry result{infinity_, value_, non_strict_};
+
+			result.infinity_ |= s2.infinity_;
+			result.value_ += s2.value_;
+			result.non_strict_ = result.non_strict_ && s2.non_strict_;
+
+			return result;
+		}
+
+		/** Finds the magnitude of the difference between two entries in the form of a RegionIndex
+		 * (i.e. the result which might have fractional part is regionalized)
+		 * 
+		 * Subtracting (from) infinity means that something is unbounded, which doesn't need any increment.
+		 * 
+		 * Strictness is subtracted like:
+		 * <= - <= is 0
+		 * <= - <  is -1
+		 * < + <=  is 1
+		 * < + <   is 0
+		 * 
+		 * If RHS's value was negative, then fractional part is inverted as it was a greater(-equal) constraint
+		 * Similarily if result was negative, fractional part is inverted as the direction is inverted too (to retain positive result)
+		*/
+		RegionIndex
+		operator-(const DBM_Entry &s2) const
+		{
+			if(infinity_ || s2.infinity_) {
+				return 0;
+			}
+
+			RegionIndex result = 0; //Signed integer since negative numbers will be involved in calculation
+			
+			//1. Calculate fractional parts of LHS and RHS
+			//(e.g. < -1 means > 1, so fractional part is: +0.1, while < 1 means fractional part is: -0.1, and for <= fractional part is always 0)
+			int fractional_lhs = 0;
+			if(!non_strict_) {
+				if(value_ < 0) {
+					fractional_lhs = 1;
+				} else {
+					fractional_lhs = -1;
+				}
+			}
+
+			int fractional_rhs = 0;
+			if(!s2.non_strict_) {
+				if(s2.value_ < 0) {
+					fractional_rhs = 1;
+				} else {
+					fractional_rhs = -1;
+				}
+			}
+
+			//2. Calculate integer difference
+			if(s2.value_ > value_) {
+				result = (RegionIndex) 2*(s2.value_ - value_);
+			} else {
+				result = (RegionIndex) 2*(value_ - s2.value_);
+			}
+
+			//3. Apply fractional part difference
+			if(fractional_lhs != fractional_rhs) { //If both fractional parts are the same, they cancel each other out
+				if(fractional_lhs == 0 || fractional_rhs == 0) { //If one fractional part is 0, then we just go from an integer region to a fractional region
+					result += 1;
+				} else { //We have a combination of +1 and -1, so difference is 2 regions, as we go from fractional to integer back to fractional
+					result += 2;
+				}
+			}
+
+			return result;
+		}
+
+		/** Compare two DBM Entries.
+		 * 
+		 * 1. Compare values as normal
+		 * 2. If values are the same, then compare non_strict as 0 or 1, as < is smaller than <=
+		 * 
+		 * @param s1 The first entry
+		 * @param s2 The second entry
+		 * @return true if s1 is lexicographically smaller than s2.
+		 */
+		friend bool
+		operator<(const DBM_Entry &s1, const DBM_Entry &s2) //Use forward_as_tuple instead of tie due to rvalues
+		{
+			//Infinity can never be smaller than something
+			if(s1.infinity_) {
+				return false;
+			} else if(s2.infinity_) { //Everything other than infinity must be smaller
+				return true;
+			}
+
+			return std::forward_as_tuple(s1.value_, s1.non_strict_)
+				< std::forward_as_tuple(s2.value_, s2.non_strict_);
+		}
+
+		/** Check two DBM Entries for equality.
+		 * @param s1 The first entry
+		 * @param s2 The second entry
+		 * @return true if s1 is equal to s2
+		 */
+		friend bool
+		operator==(const DBM_Entry &s1, const DBM_Entry &s2) {
+			return !(s1 < s2) && !(s2 < s1);
+		}
+
+		/** Check two DBM Entries for inequality.
+		 * @param s1 The first entry
+		 * @param s2 The second entry
+		 * @return true if s1 is not equal to s2
+		 */
+		friend bool
+		operator!=(const DBM_Entry &s1, const DBM_Entry &s2) {
+			return !(s1 == s2);
+		}
+	};
+
+	/** Class for a weighted graph modelled as an Adjacency Matrix
+	 * 
+	 * Vertexes are clock names together with an extra vertex for the zero clock
+	 * Edge weights are DBM_Entries
+	 */
+	class Graph
+	{
+		public:
+		/** Default Constructor with no clocks so also an empty Matrix */
+		Graph()
+		{
+
+		}
+
+		/** Constructs a new Graph for this set of clocks. Each edge is labeled with infinity */
+		Graph(std::set<std::string> clocks) {
+			//Assign each clock an index:
+			int k = 1;
+			for(const auto &clock : clocks) {
+				clock_to_index[clock] = k;
+				k++;
+			}
+
+			matrix_ = Matrix(k);
+		}
+
+		public:
+		/** Calculate shortest path from each vertex to each vertex and update the matrix accordingly */
+		void floyd_warshall();
+
+		/** Returns size of graph. The size is the amount of clocks including the implicit zero clock*/
+		std::size_t
+		size() const
+		{
+			return matrix_.size();
+		}
+
+		/** Get the index as which */
+		std::size_t
+		get_index_of_clock(std::string clock) const
+		{
+			return clock_to_index.at(clock);
+		}
+
+		/** Get the DBM_Entry at these indices */
+		DBM_Entry& get(std::size_t x, std::size_t y)
+		{
+			return matrix_(x, y);
+		}
+
+		/** Get the DBM_Entry of these clocks */
+		DBM_Entry& get(std::string clock1, std::string clock2)
+		{
+			return matrix_(clock_to_index[clock1], clock_to_index[clock2]);
+		}
+
+		/** Get the DBM_Entry of this index and clock */
+		DBM_Entry& get(std::size_t x, std::string clock)
+		{
+			return matrix_(x, clock_to_index[clock]);
+		}
+
+		/** Get the DBM_Entry of this clock and index */
+		DBM_Entry& get(std::string clock, std::size_t y)
+		{
+			return matrix_(clock_to_index[clock], y);
+		}
+
+		/** Get the DBM_Entry as a value at these indices (For constness, mostly testing) */
+		DBM_Entry get_value(std::size_t x, std::size_t y) const
+		{
+			return matrix_.get(x, y);
+		}
+
+		private:
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~HELPING MATRIX~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		/** Class of Matrix in which the graph is stored */
+		class Matrix
+		{
+			public:
+			/** Default Constructor with empty vector */
+			Matrix()
+			{
+
+			}
+
+			Matrix(std::size_t size)
+			{
+				m_.resize(size, std::vector<DBM_Entry>(size, DBM_Entry{true, 0, false}));
+			}
+
+			DBM_Entry& operator()(std::size_t x, std::size_t y)
+			{
+				return m_.at(x).at(y);
+			}
+
+			DBM_Entry get(std::size_t x, std::size_t y) const
+			{
+				return m_.at(x).at(y);
+			}
+
+			/** Returns the size of this matrix */
+			std::size_t
+			size() const
+			{
+				return m_.size();
+			}
+
+			private:
+			std::vector<std::vector<DBM_Entry>> m_;
+		};
+
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~END MATRIX~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+		private:
+		Matrix matrix_;
+		std::map<std::string, std::size_t> clock_to_index;
+	};
+
 	/** Class for storing zones as a Difference Bound Matrix
 	 * 
 	 * This allows for the easy storing of differences between clocks, while also ensuring they stay consistent.
@@ -294,19 +559,13 @@ namespace tacos::zones {
 
 		/** Construct the initial Zone Difference Bound Matrix (DBM) for the given clocks.
 		 * This will be a graph with |clocks|+1 many vertices.
+		 * Nothing is bounded in the beginning, i.e. everything is bounded by only infinity.
 		 * 
 		 * @param clocks The set of all clocks that will be covered by this zone
 		 * @param max_constant The maximal constant that can appear for any given clock
 		 */
 		Zone_DBM(std::set<std::string> clocks, Endpoint max_constant) : max_constant_(max_constant) {
 			graph_ = Graph(clocks);
-
-			for(const auto &clock : clocks) {
-				if(!(clock_zones_.insert( {clock, get_zone_slice(clock)} ).second)) {
-					//Collison, i.e. item already exists
-					clock_zones_.at(clock) =  get_zone_slice(clock);
-				}
-			}
 		}
 
 		/** Construct the initial Zone Difference Bound Matrix (DBM) for the given clock constraints.
@@ -366,279 +625,46 @@ namespace tacos::zones {
 		 */
 		bool is_consistent();
 
+		/** For testing */
+		std::map<std::string, std::size_t>
+		get_indexes(std::set<std::string> clocks)
+		{
+			std::map<std::string, std::size_t> ret;
+
+			for(const auto &clock : clocks) {
+				ret.insert( {clock, graph_.get_index_of_clock(clock)} );
+			}
+
+			return ret;
+		}
+
+		/** Gets graph element at x,y
+		 */
+		DBM_Entry at(std::size_t x, std::size_t y) const;
+
+		/** Gets graph element at index(clock),y
+		 */
+		DBM_Entry at(std::string clock, std::size_t y) const;
+
+		/** Gets graph element at x,index(clock)
+		 */
+		DBM_Entry at(std::size_t x, std::string clock) const;
+
+		/** Gets graph element at index(clock),index(clock)
+		 */
+		DBM_Entry at(std::string clock1, std::string clock2) const;
+
 		/** Calculates the increment needed in order to reach the new DBM.
 		 * 
 		 * @param new_dbm The new DBM that is supposed to be reached
 		 * @return The needed increment as a Region Index
 		 */
-		RegionIndex get_increment(Zone_DBM new_dbm);
+		RegionIndex get_increment(Zone_DBM new_dbm) const;
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~HELPING CLASSES~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		/** Returns the amount of clocks in this DBM (excluding 0) */
+		std::size_t size() const;
+
 		private:
-		/** Entry within the Adjacency Matrix, i.e. this is the type for the edge weights */
-		struct DBM_Entry
-		{
-			bool infinity_; //Whether this entry is supposed to be infinity. If this is true, the rest is essentially ignored
-			int value_; //Value. Unlike Endpoints this can be positive or negative
-			bool non_strict_; //i.e. true means <=, while false means <
-
-			DBM_Entry(bool infty, int value, bool non_strict) : 
-			infinity_(infty), value_(value), non_strict_(non_strict)
-			{
-				// :)
-			}
-
-			DBM_Entry(int value, bool non_strict) : 
-			infinity_(false), value_(value), non_strict_(non_strict)
-			{
-				// :)
-			}
-
-			/** Adds another Entry to this entry 
-			 * 
-			 * Adding infinity will always result in infinity.
-			 * Otherwise the values are added together normally.
-			 * 
-			 * Strictness is added like:
-			 * <= + <= is <=
-			 * <= + <  is <
-			 * < + <=  is <
-			 * < + <   is <
-			*/
-			DBM_Entry
-			operator+(const DBM_Entry &s2) const
-			{
-				DBM_Entry result{infinity_, value_, non_strict_};
-
-				if(s2.infinity_) {
-					result.infinity_ = true;
-					return result;
-				}
-
-				result.value_ += s2.value_;
-				result.non_strict_ = result.non_strict_ && s2.non_strict_;
-
-				return result;
-			}
-
-			/** Finds the magnitude of the difference between two entries in the form of a RegionIndex
-			 * (i.e. the result which might have fractional part is regionalized)
-			 * 
-			 * Subtracting (from) infinity will always result in infinity, so the max Region Index is taken.
-			 * The values are subtracted normally
-			 * 
-			 * Strictness is subtracted like:
-			 * <= - <= is 0
-			 * <= - <  is 1
-			 * < + <=  is -1
-			 * < + <   is 0
-			*/
-			RegionIndex
-			operator-(const DBM_Entry &s2) const
-			{
-				int result = 0; //Signed integer since negative numbers will be involved in calculation
-
-				if(s2.infinity_) {
-					result = ZONE_INFTY; //TODO Need better way to handle infinity
-					return result;
-				}
-
-				int fractional_part = 0; //either -1, 0, or 1 to represent -0.1, 0, and +0.1 to the real number
-				result = value_ - s2.value_;
-				if(non_strict_ != s2.non_strict_) {
-					if(non_strict_) { //case:  <= - <
-						fractional_part = 1;
-					} else { //case: < - <=
-						fractional_part = -1;
-					}
-				}
-				if(result < 0) {
-					result = -result;
-					fractional_part = -fractional_part;
-				}
-
-				result = result * 2;
-				result = result + fractional_part;
-
-				assert(result >= 0);
-
-				return (RegionIndex) result;
-			}
-
-			/** Compare two DBM Entries.
-			 * 
-			 * 1. Compare values as normal
-			 * 2. If values are the same, then compare non_stirct as 0 or 1
-			 * 
-			 * @param s1 The first entry
-			 * @param s2 The second entry
-			 * @return true if s1 is lexicographically smaller than s2.
-			 */
-			friend bool
-			operator<(const DBM_Entry &s1, const DBM_Entry &s2) //Use forward_as_tuple instead of tie due to rvalues
-			{
-				//Logical negation, since strict is usually smaller, and false == 0. Not really that important
-				return std::forward_as_tuple(s1.infinity_, s1.value_, s1.non_strict_)
-					< std::forward_as_tuple(s2.infinity_, s2.value_, s2.non_strict_);
-			}
-
-			/** Check two DBM Entries for equality.
-			 * @param s1 The first entry
-			 * @param s2 The second entry
-			 * @return true if s1 is equal to s2
-			 */
-			friend bool
-			operator==(const DBM_Entry &s1, const DBM_Entry &s2) {
-				return !(s1 < s2) && !(s2 < s1);
-			}
-
-			/** Check two DBM Entries for inequality.
-			 * @param s1 The first entry
-			 * @param s2 The second entry
-			 * @return true if s1 is not equal to s2
-			 */
-			friend bool
-			operator!=(const DBM_Entry &s1, const DBM_Entry &s2) {
-				return !(s1 == s2);
-			}
-		};
-
-		/** Class for a weighted graph modelled as an Adjacency Matrix
-		 * 
-		 * Vertexes are clock names together with an extra vertex for the zero clock
-		 * Edge weights are DBM_Entries
-		 */
-		class Graph
-		{
-			public:
-			/** Default Constructor with no clocks so also an empty Matrix */
-			Graph()
-			{
-
-			}
-
-			/** Constructs a new Graph for this set of clocks. Each edge is labeled with infinity */
-			Graph(std::set<std::string> clocks) {
-				//Assign each clock an index:
-				int k = 1;
-				for(const auto &clock : clocks) {
-					clock_to_index[clock] = k;
-				}
-
-				matrix_ = Matrix(k+1);
-			}
-
-			private:
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~HELPING MATRIX~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-			/** Class of Matrix in which the graph is stored */
-			class Matrix
-			{
-				public:
-				/** Default Constructor with empty vector */
-				Matrix()
-				{
-
-				}
-
-				Matrix(std::size_t size)
-				{
-					m_.resize(size, std::vector<DBM_Entry>(size, DBM_Entry{true, 0, false}));
-				}
-
-				DBM_Entry& operator()(std::size_t x, std::size_t y)
-				{
-					return m_.at(x).at(y);
-				}
-
-				/** Returns the size of this matrix */
-				std::size_t
-				size()
-				{
-					return m_.size();
-				}
-
-				private:
-				std::vector<std::vector<DBM_Entry>> m_;
-			};
-
-			//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~END MATRIX~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-			public:
-			/** Calculate shortest path from each vertex to each vertex and update the matrix accordingly */
-			void floyd_warshall()
-			{
-				//TODO copied from Wikipedia, which is pass by value, so inefficient but ddefinitely correct
-
-				std::size_t n = matrix_.size();
-
-				//Set distance of a node to itself to 0
-				for(std::size_t u = 0; u < n; u++) {
-					for(std::size_t v; v < n; v++) {
-						if(u == v) {
-							matrix_(u,v) = DBM_Entry{0, true};
-							continue;
-						}
-					}
-				}
-
-				//Find shortest distance between each pair of nodes
-				for(std::size_t k = 0; k < n; k++) {
-					for(std::size_t i = 0; i < n; i++) {
-						for(std::size_t j = 0; j < n; j++) {
-							DBM_Entry new_distance = matrix_(i, k) + matrix_(k, j);
-
-							if(new_distance < matrix_(i, j)) {
-								matrix_(i, j) = new_distance;
-							}
-						}
-					}
-				}
-			}
-
-			/** Returns size of graph. The size is the amount of clocks including the implicit zero clock*/
-			std::size_t
-			size()
-			{
-				return matrix_.size();
-			}
-
-			/** Get the index as which */
-			std::size_t
-			get_index_of_clock(std::string clock)
-			{
-				return clock_to_index[clock];
-			}
-
-			/** Get the DBM_Entry at these indices */
-			DBM_Entry& get(std::size_t x, std::size_t y)
-			{
-				return matrix_(x, y);
-			}
-
-			/** Get the DBM_Entry of these clocks */
-			DBM_Entry& get(std::string clock1, std::string clock2)
-			{
-				return matrix_(clock_to_index[clock1], clock_to_index[clock2]);
-			}
-
-			/** Get the DBM_Entry of this index and clock */
-			DBM_Entry& get(std::size_t x, std::string clock)
-			{
-				return matrix_(x, clock_to_index[clock]);
-			}
-
-			/** Get the DBM_Entry of this clock and index */
-			DBM_Entry& get(std::string clock, std::size_t y)
-			{
-				return matrix_(clock_to_index[clock], y);
-			}
-
-			private:
-			Matrix matrix_;
-			std::map<std::string, std::size_t> clock_to_index;
-		};
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~END HELPING FUNCTIONS~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 		/** Conjuncts the DBM with this diagonal clock constraint: comparison(x,y)
 		 * 
 		 * e.g. if comparison is (2, <=), then the clock constraint is:
@@ -651,37 +677,15 @@ namespace tacos::zones {
 		 * @param y index of second clock
 		 * @param comparison DBM_Entry denoting the constant and type of the comparison
 		 */
-		void and_func(std::size_t x, std::size_t y, DBM_Entry comparison)
-		{
-			//Check whether this will make the zone inconsistent
-			if(graph_.get(y, x) + comparison < DBM_Entry{0, false}) {
-				graph_.get(0, 0) = DBM_Entry{-1, false};
-				return;
-			}
-
-			if(comparison < graph_.get(x, y)) {
-				graph_.get(x, y) = comparison;
-				
-				//Make canonical by getting shortest paths
-				graph_.floyd_warshall();
-			}
-		}
+		void and_func(std::size_t x, std::size_t y, DBM_Entry comparison);
 
 		public:
-		//The specific zone of all the clocks (clocks encoded as string)
-		std::map<std::string, Zone_slice> clock_zones_;
 		//Max constant that may appear in any zone
 		Endpoint max_constant_;
 
 		private:
 		Graph graph_;
 	};
-
-	std::ostream &
-	operator<<(std::ostream &os, const zones::Zone_slice &zone_slice);
-
-	std::ostream &
-	operator<<(std::ostream &os, const std::map<std::string, tacos::zones::Zone_slice> &zone);
 
 	/**
 	 * @brief Checks whether a zone's interval is valid, i.e. lower bound is less equal to upper bound, and no bounds exceed the max constant
@@ -728,6 +732,18 @@ namespace tacos::zones {
 	bool
 	is_satisfied(const automata::ClockConstraint &constraint, const Zone_slice &zone);
 
+	std::ostream &
+	operator<<(std::ostream &os, const zones::Zone_slice &zone_slice);
+
+	std::ostream &
+	operator<<(std::ostream &os, const std::map<std::string, tacos::zones::Zone_slice> &zone);
+
+	std::ostream &
+	operator<<(std::ostream &os, const zones::DBM_Entry &dbm_entry);
+
+	std::ostream &
+	operator<<(std::ostream &os, const zones::Zone_DBM &dbm);
+
 } //namespace tacos::zones
 
 namespace fmt {
@@ -739,6 +755,16 @@ struct formatter<std::map<std::string, tacos::zones::Zone_slice>> : ostream_form
 
 template <>
 struct formatter<tacos::zones::Zone_slice> : ostream_formatter
+{
+};
+
+template <>
+struct formatter<tacos::zones::DBM_Entry> : ostream_formatter
+{
+};
+
+template <>
+struct formatter<tacos::zones::Graph> : ostream_formatter
 {
 };
 

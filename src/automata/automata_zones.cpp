@@ -6,26 +6,42 @@ namespace tacos::zones {
 	Zone_slice
 	Zone_DBM::get_zone_slice(std::string clock)
 	{
+		if(!is_consistent()) {
+			return Zone_slice{0, 0, true, true, max_constant_};
+		}
+
 		Zone_slice ret{0, 0, false, false, max_constant_};
 
 		const DBM_Entry &lower_bound = graph_.get(0, clock);
 		const DBM_Entry &upper_bound = graph_.get(clock, 0);
 
-		ret.lower_bound_ = (Endpoint) -lower_bound.value_;
+		if(lower_bound.value_ < 0) {
+			ret.lower_bound_ = (Endpoint) -lower_bound.value_;
+		} else {
+			ret.lower_bound_ = 0;
+		}
+		
 		ret.lower_isOpen_ = !lower_bound.non_strict_;
 
 		ret.upper_bound_ = (Endpoint) upper_bound.value_;
 		ret.upper_isOpen_ = !upper_bound.non_strict_;
 
 		if(lower_bound.infinity_) {
-			ret.lower_bound_ = max_constant_;
-			ret.lower_isOpen_ = true;
+			ret.lower_bound_ = 0;
+			ret.lower_isOpen_ = false;
 		}
 
-		if(upper_bound.infinity_) {
+		if(ret.lower_bound_ > max_constant_) {
+			ret.lower_bound_ = max_constant_;
+			ret.lower_isOpen_ = false;
+		}
+
+		if(upper_bound.infinity_ || ret.upper_bound_ > max_constant_) {
 			ret.upper_bound_ = max_constant_;
 			ret.upper_isOpen_ = false;
 		}
+
+		assert(is_valid_zone(ret));
 
 		return ret;
 	}
@@ -47,6 +63,8 @@ namespace tacos::zones {
 			graph_.get(index, i) = DBM_Entry{0, true} + graph_.get(0, i);
 			graph_.get(i, index) = graph_.get(i, 0) + DBM_Entry{0, true};
 		}
+
+		normalize();
 	}
 
 	void
@@ -54,8 +72,8 @@ namespace tacos::zones {
 	{
 		std::size_t index = graph_.get_index_of_clock(clock);
 
-		DBM_Entry lower_entry{true, 0, true};
-		DBM_Entry upper_entry{true, (int) max_constant_, true};
+		DBM_Entry lower_entry{true, 0, false};
+		DBM_Entry upper_entry{true, 0, false};
 
 		int constant = (int) std::visit([](const auto &atomic_clock_constraint)
 						-> Time { return atomic_clock_constraint.get_comparand(); },
@@ -78,13 +96,13 @@ namespace tacos::zones {
 			upper_entry.non_strict_ = true;
 			break;
 		case 2: //equal_to
-			lower_entry.infinity_ = false;
-			lower_entry.value_ = -constant;
-			lower_entry.non_strict_ = true;
-
 			upper_entry.infinity_ = false;
 			upper_entry.value_ = constant;
 			upper_entry.non_strict_ = true;
+
+			lower_entry.infinity_ = false;
+			lower_entry.value_ = -constant;
+			lower_entry.non_strict_ = true;
 			break;
 		case 4: //greater_equal
 			lower_entry.infinity_ = false;
@@ -102,13 +120,16 @@ namespace tacos::zones {
 		}
 
 		//Apply the algorithm on lower_entry and also upper_entry
-		and_func(index, 0, lower_entry);
-		and_func(0, index, upper_entry);
-
-		if(!(clock_zones_.insert( {clock, get_zone_slice(clock)} ).second)) {
-			//Collison, i.e. item already exists
-			clock_zones_.at(clock) = get_zone_slice(clock);
+		if(!upper_entry.infinity_) {
+			and_func(index, 0, upper_entry);
 		}
+
+		if(!lower_entry.infinity_) {
+			and_func(0, index, lower_entry);
+		}
+
+
+		normalize();
 	}
 
 	void
@@ -125,27 +146,31 @@ namespace tacos::zones {
 			for(std::size_t j = 0; j < graph_.size(); j++) {
 				if(!graph_.get(i, j).infinity_ && DBM_Entry{(int) max_constant_, true} < graph_.get(i, j)) {
 					graph_.get(i, j).infinity_ = true;
+				} else if(!graph_.get(i, j).infinity_ && graph_.get(i, j) < DBM_Entry{-1*((int) max_constant_), false}) {
+					graph_.get(i, j) = DBM_Entry{-1*((int) max_constant_), false};
 				}
 			}
 		}
+
+		graph_.floyd_warshall();
 	}
 
 	bool
 	Zone_DBM::is_consistent()
 	{
-		return graph_.get(0, 0).value_ >= 0;
+		return graph_.get(0, 0).value_ == 0;
 	}
 
 	RegionIndex
-	Zone_DBM::get_increment(Zone_DBM new_dbm)
+	Zone_DBM::get_increment(Zone_DBM new_dbm) const
 	{
 		//Find the largest difference in magnitude, unless it is of a clock that has been reset.
 		RegionIndex largest_difference = 0;
 
 		for(std::size_t i = 0; i < graph_.size(); i++) {
 			for(std::size_t j = 0; j < graph_.size(); j++) {
-				RegionIndex difference = graph_.get(i, j) - new_dbm.graph_.get(i, j);
-				if(difference != 0 && graph_.get(i, j) != DBM_Entry{0, true}) {
+				RegionIndex difference = new_dbm.graph_.get(i, j) - graph_.get_value(i, j);
+				if(difference != 0 && graph_.get_value(i, j) != DBM_Entry{0, true}) {
 					if(difference > largest_difference) {
 						largest_difference = difference;
 					}
@@ -154,6 +179,84 @@ namespace tacos::zones {
 		}
 
 		return largest_difference;
+	}
+
+	void
+	Zone_DBM::and_func(std::size_t x, std::size_t y, DBM_Entry comparison)
+	{
+		//Check whether this will make the zone inconsistent, i.e. negative cycle
+		if(graph_.get(y, x) + comparison < DBM_Entry{0, false}) {
+			graph_.get(0, 0) = DBM_Entry{-1, false};
+			return;
+		}
+
+		if(comparison < graph_.get(x, y)) {
+			graph_.get(x, y) = comparison;
+			
+			//Make canonical by getting shortest paths
+			graph_.floyd_warshall();
+		}
+	}
+
+	DBM_Entry
+	Zone_DBM::at(std::size_t x, std::size_t y) const
+	{
+		return graph_.get_value(x, y);
+	}
+
+	DBM_Entry
+	Zone_DBM::at(std::string clock, std::size_t y) const
+	{
+		return graph_.get_value(graph_.get_index_of_clock(clock), y);
+	}
+
+	DBM_Entry
+	Zone_DBM::at(std::size_t x, std::string clock) const
+	{
+		return graph_.get_value(x, graph_.get_index_of_clock(clock));
+	}
+
+	DBM_Entry
+	Zone_DBM::at(std::string clock1, std::string clock2) const
+	{
+		return graph_.get_value(graph_.get_index_of_clock(clock1), graph_.get_index_of_clock(clock2));
+	}
+
+	std::size_t
+	Zone_DBM::size() const
+	{
+		return graph_.size() - 1;
+	}
+
+	void 
+	Graph::floyd_warshall()
+	{
+		//Inconsistent DBMs can't become canonical
+		if(get(0,0).value_ != 0) {
+			return;
+		}
+
+		//copied from Wikipedia
+
+		std::size_t n = size();
+
+		//Set distance of a node to itself to 0
+		for(std::size_t u = 0; u < n; u++) {
+			get(u, u) = DBM_Entry{0, true};
+		}
+
+		//Find shortest distance between each pair of nodes
+		for(std::size_t k = 0; k < n; k++) {
+			for(std::size_t i = 0; i < n; i++) {
+				for(std::size_t j = 0; j < n; j++) {
+					DBM_Entry new_distance = get(i, k) + get(k, j);
+
+					if(new_distance < get(i, j)) {
+						get(i, j) = new_distance;
+					}
+				}
+			}
+		}
 	}
 
 	std::multimap<std::string, automata::ClockConstraint>
@@ -310,6 +413,42 @@ namespace tacos::zones {
 		}
 
 		os << " }";
+
+		return os;
+	}
+
+	std::ostream &
+	operator<<(std::ostream &os, const tacos::zones::DBM_Entry &dbm_entry)
+	{
+		if(dbm_entry.infinity_) {
+			os << u8"∞";
+			return os;
+		}
+
+		std::string relation;
+		if(dbm_entry.non_strict_) {
+			relation = u8"≤";
+		} else {
+			relation = "<";
+		}
+
+		os << "(" << dbm_entry.value_ << ", " << relation << ")";
+
+		return os;
+	}
+
+	std::ostream &
+	operator<<(std::ostream &os, const tacos::zones::Zone_DBM &dbm)
+	{
+		for (std::size_t i = 0; i < dbm.size() + 1; i++)
+		{
+			os << "| ";
+			for (std::size_t j = 0; j < dbm.size() + 1; j++)
+			{
+				os << dbm.at(i, j) << " ";
+			}
+			os << "|\n";
+		}
 
 		return os;
 	}

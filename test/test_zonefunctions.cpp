@@ -243,22 +243,6 @@ TEST_CASE("Canonical Word using zones", "[zones]")
 	CHECK(initial_word
 			  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "x", zone_less1},
 								   ATAZoneState{logic::MTLFormula{AP{"l0"}}, zone_everything}}}));
-
-	CHECK(search::get_next_canonical_words<TimedAutomaton, std::string, std::string, false>()(
-				ta, ata, {ta.get_initial_configuration(), ata.get_initial_configuration()}, 0, 2, true)
-			  == std::multimap<std::string, CanonicalABWord>{
-				{"b", CanonicalABWord{{PlantZoneState{Location{"s1"}, "x", zone_less1}, ATAZoneState{f, zone_everything}}}},
-				{"c",
-				 CanonicalABWord{{PlantZoneState{Location{"s2"}, "x", zone_everything},
-								  ATAZoneState{mtl_ata_translation::get_sink<std::string>(), zone_everything}}}}});
-	
-	CHECK(search::get_next_canonical_words<TimedAutomaton, std::string, std::string, false>()(
-				ta, ata, {ta.get_initial_configuration(), ATAConfiguration{{f, 0}}}, 0, 2, true)
-			  == std::multimap<std::string, CanonicalABWord>{
-				{"b", CanonicalABWord{{PlantZoneState{Location{"s1"}, "x", zone_less1}}}},
-				{"c",
-				 CanonicalABWord{{PlantZoneState{Location{"s2"}, "x", zone_everything},
-								  ATAZoneState{mtl_ata_translation::get_sink<std::string>(), zone_everything}}}}});
 }
 
 TEST_CASE("monotone_domination_order for zones", "[zones]")
@@ -300,197 +284,181 @@ TEST_CASE("monotone_domination_order for zones", "[zones]")
 		 {ATAZoneState{logic::MTLFormula{AP{"a"}}, zone0}}})));
 }
 
-//This is pointless when zones just get delayed. Almost all resulting zones will be the same
-#if false
-TEST_CASE("Get time successors of CanonicalABWords using zones", "[zones]")
+TEST_CASE("Difference Bound Matrix tests", "[zones]")
 {
-	zones::Zone_slice zone_all = zones::Zone_slice{0, 3, false, false, 3};
-	zones::Zone_slice zone_gtr_0 = zones::Zone_slice{0, 3, true, false, 3};
-	zones::Zone_slice zone_geq_1 = zones::Zone_slice{1, 3, false, false, 3};
-	zones::Zone_slice zone_gtr_1 = zones::Zone_slice{1, 3, true, false, 3};
+	using zones::Zone_DBM;
+	using zones::DBM_Entry;
 
-	// TODO rewrite test cases to only contain valid words
-	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone_all}},
-											  {PlantZoneState{Location{"s0"}, "c1", zone_gtr_0}}}),
-							 3)
-		  == CanonicalABWord(
-			{{PlantZoneState{Location{"s0"}, "c0", zone_gtr_0}}, {PlantZoneState{Location{"s0"}, "c1", zone_gtr_0}}}));
-	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone_all}}}), 3)
-		  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone_gtr_0}}}));
-	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone_all}},
-											  {PlantZoneState{Location{"s0"}, "c1", zone_gtr_0}},
-											  {PlantZoneState{Location{"s0"}, "c2", zone_geq_1}}}),
-							 3)
-		  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone_gtr_0}},
-							  {PlantZoneState{Location{"s0"}, "c1", zone_gtr_0}},
-							  {PlantZoneState{Location{"s0"}, "c2", zone_geq_1}}}));
-	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone_gtr_0}},
-											  {PlantZoneState{Location{"s0"}, "c1", zone_geq_1}}}),
-							 3)
-		  == CanonicalABWord(
-			{{PlantZoneState{Location{"s0"}, "c1", zone_gtr_1}}, {PlantZoneState{Location{"s0"}, "c0", zone_gtr_0}}}));
-	
-	//TODO: Refactor all further tests
-	#if false
-	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 1}},
-											  {PlantZoneState{Location{"s0"}, "c1", 1}}}),
-							 3)
-		  == CanonicalABWord(
-			{{PlantZoneState{Location{"s0"}, "c1", 2}}, {PlantZoneState{Location{"s0"}, "c0", 1}}}));
-	const logic::AtomicProposition<std::string> a{"a"};
-	const logic::AtomicProposition<std::string> b{"b"};
-	CHECK(get_time_successor(CanonicalABWord({{ATAZoneState{a, 0}},
-											  {ATAZoneState{b, 1}},
-											  {ATAZoneState{a || b, 3}}}),
-							 3)
-		  == CanonicalABWord(
-			{{ATAZoneState{a, 1}}, {ATAZoneState{b, 1}}, {ATAZoneState{a || b, 3}}}));
-	CHECK(get_time_successor(CanonicalABWord({{ATAZoneState{a, 7}}}), 3)
-		  == CanonicalABWord({{ATAZoneState{a, 7}}}));
-	CHECK(get_time_successor(CanonicalABWord({{ATAZoneState{b, 3}}, {ATAZoneState{a, 7}}}), 3)
-		  == CanonicalABWord({{ATAZoneState{b, 4}}, {ATAZoneState{a, 7}}}));
+	[[maybe_unused]] automata::ClockConstraint c_eq0 = automata::AtomicClockConstraintT<std::equal_to<Time>>(0);
+	[[maybe_unused]] automata::ClockConstraint c_lt1 = automata::AtomicClockConstraintT<std::less<Time>>(1);
+	[[maybe_unused]] automata::ClockConstraint c_eq3 = automata::AtomicClockConstraintT<std::equal_to<Time>>(3);
+	[[maybe_unused]] automata::ClockConstraint c_ge3 = automata::AtomicClockConstraintT<std::greater_equal<Time>>(3);
+	[[maybe_unused]] automata::ClockConstraint c_gt5 = automata::AtomicClockConstraintT<std::greater<Time>>(5);
+	[[maybe_unused]] automata::ClockConstraint c_le9 = automata::AtomicClockConstraintT<std::less_equal<Time>>(9);
+	[[maybe_unused]] automata::ClockConstraint c_le14 = automata::AtomicClockConstraintT<std::less_equal<Time>>(14);
+	[[maybe_unused]] automata::ClockConstraint c_ge15 = automata::AtomicClockConstraintT<std::greater_equal<Time>>(15);
 
-	CHECK(get_time_successor(CanonicalABWord({{ATAZoneState{b, 3}, ATAZoneState{a, 7}}}), 3)
-		  == CanonicalABWord({{ATAZoneState{b, 4}}, {ATAZoneState{a, 7}}}));
+	std::multimap<std::string, automata::ClockConstraint> clock_constraints;
 
-	CHECK(get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s1"}, "c0", 4}},
-											  {PlantZoneState{Location{"s0"}, "c0", 3}},
-											  {ATAZoneState{a, 7}}}),
-							 3)
-		  == CanonicalABWord({{PlantZoneState{Location{"s1"}, "c0", 5}},
-							  {PlantZoneState{Location{"s0"}, "c0", 3}},
-							  {ATAZoneState{a, 7}}}));
-	CHECK(get_time_successor(CanonicalABWord({{ATAZoneState{b, 1}, ATAZoneState{a, 3}}}), 3)
-		  == CanonicalABWord({{ATAZoneState{b, 2}, ATAZoneState{a, 4}}}));
-	CHECK(get_time_successor(
-			CanonicalABWord({{PlantZoneState{Location{"l0"}, "x", 1}, ATAZoneState{a, 5}}}), 2)
-		  == CanonicalABWord({{PlantZoneState{Location{"l0"}, "x", 2}}, {ATAZoneState{a, 5}}}));
+	clock_constraints.insert( {"x", c_ge3} );
+	clock_constraints.insert( {"x", c_le9} );
+	clock_constraints.insert( {"y", c_eq3} );
+	clock_constraints.insert( {"z", c_eq3} );
 
-	CHECK(get_time_successor(CanonicalABWord{{PlantZoneState{Location{"l0"}, "x0", 0}},
-											 {PlantZoneState{Location{"l0"}, "x1", 1}},
-											 {PlantZoneState{Location{"l0"}, "x3", 3}}},
-							 1)
-		  == CanonicalABWord{{PlantZoneState{Location{"l0"}, "x0", 1}},
-							 {PlantZoneState{Location{"l0"}, "x1", 1}},
-							 {PlantZoneState{Location{"l0"}, "x3", 3}}});
-	// x2 is incremented and should end up in the last partition with the maxed regions.
-	CHECK(get_time_successor(CanonicalABWord{{PlantZoneState{Location{"l0"}, "x2", 2}},
-											 {PlantZoneState{Location{"l0"}, "x3", 3}}},
-							 1)
-		  == CanonicalABWord{
-			{PlantZoneState{Location{"l0"}, "x2", 3}, PlantZoneState{Location{"l0"}, "x3", 3}}});
-	CHECK(get_time_successor(CanonicalABWord{{PlantZoneState{Location{"l0"}, "x0", 0},
-											  PlantZoneState{Location{"l0"}, "x2", 2}},
-											 {PlantZoneState{Location{"l0"}, "x1", 1}},
-											 {PlantZoneState{Location{"l0"}, "x3", 3}}},
-							 1)
-		  == CanonicalABWord{{PlantZoneState{Location{"l0"}, "x0", 1}},
-							 {PlantZoneState{Location{"l0"}, "x1", 1}},
-							 {PlantZoneState{Location{"l0"}, "x2", 3},
-							  PlantZoneState{Location{"l0"}, "x3", 3}}});
+	std::set<std::string> clocks{"x", "y", "z"};
 
-	// Both x0 and x2 are incremented and should be split. x2 should end up in the maxed partition
-	// with x3.
-	CHECK(get_time_successor(CanonicalABWord{{PlantZoneState{Location{"l0"}, "x0", 0},
-											  PlantZoneState{Location{"l0"}, "x2", 2}},
-											 {PlantZoneState{Location{"l0"}, "x3", 3}}},
-							 1)
-		  == CanonicalABWord{{PlantZoneState{Location{"l0"}, "x0", 1}},
-							 {PlantZoneState{Location{"l0"}, "x2", 3},
-							  PlantZoneState{Location{"l0"}, "x3", 3}}});
+	Zone_DBM dbm{clocks, 9};
 
-	// Successor of successor.
-	CHECK(get_time_successor(
-			get_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 0}}}), 3), 3)
-		  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 2}}}));
-	CHECK(search::get_nth_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 0}}}),
-										 2,
-										 3)
-		  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 2}}}));
-	CHECK(search::get_nth_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 0}}}),
-										 0,
-										 3)
-		  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 0}}}));
-	CHECK(search::get_nth_time_successor(CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 0}}}),
-										 7,
-										 3)
-		  == search::get_nth_time_successor(
-			CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", 0}}}), 8, 3));
-	CHECK(get_time_successor(CanonicalABWord{{ATAZoneState{a, 0}},
-											 {PlantZoneState{Location{"s0"}, "c0", 1}}},
-							 1)
-		  == CanonicalABWord{{ATAZoneState{a, 1}}, {PlantZoneState{Location{"s0"}, "c0", 1}}});
-	CHECK(get_time_successor(CanonicalABWord{{ATAZoneState{a, 1}},
-											 {PlantZoneState{Location{"s0"}, "c0", 1}}},
-							 1)
-		  == CanonicalABWord{{PlantZoneState{Location{"s0"}, "c0", 2}}, {ATAZoneState{a, 1}}});
-	#endif
-}
-#endif
+	SECTION("Correct Indexes"){
+		CHECK(dbm.size() == 3);
 
-//Trivial Checks used to be != so that the result will always be put out (I am too lazy/stupid to figure out how to properly debug)
-TEST_CASE("Debug Railroad example using zones", "[zones]") {
-	using Location = automata::ta::Location<std::vector<std::string>>;
-	using TimedAutomaton = automata::ta::TimedAutomaton<std::vector<std::string>, std::string>;
-
-	//using TAConfiguration = PlantConfiguration<Location>;
-
-	//using PlantState = search::PlantState<Location>;
-	//using ATAState = search::ATAState<std::string>;
-	using CanonicalABWord = search::CanonicalABWord<Location, std::string>;
-	using PlantZoneState = search::PlantZoneState<Location>;
-	using ATAZoneState = search::ATAZoneState<std::string>;
-
-	using zones::Zone_slice;
-	using automata::ClockConstraint;
-
-	[[maybe_unused]] Zone_slice zone_all{0, 2, false, false, 2};
-	[[maybe_unused]] Zone_slice zone_lt1{0, 1, false, true, 2};
-
-	[[maybe_unused]] automata::ClockConstraint c_eq1 = automata::AtomicClockConstraintT<std::equal_to<Time>>(1);
-	[[maybe_unused]] automata::ClockConstraint c_eq2 = automata::AtomicClockConstraintT<std::equal_to<Time>>(2);
-
-
-	const auto &[plant, spec, controller_actions, environment_actions] = create_crossing_problem({2});
-
-	auto              ata = mtl_ata_translation::translate(spec);
-
-	std::multimap<std::string, ClockConstraint> clock_constraints = plant.get_clock_constraints(plant.get_initial_configuration());
-	std::set<ClockConstraint> ata_constraints = ata.get_clock_constraints(ata.get_initial_configuration());
-
-	for(auto iter1 = ata_constraints.begin(); iter1 != ata_constraints.end(); iter1++)
-	{
-		clock_constraints.insert( {"", *iter1} );
+		CHECK(dbm.get_indexes(clocks).at("x") == 1);
+		CHECK(dbm.get_indexes(clocks).at("y") == 2);
+		CHECK(dbm.get_indexes(clocks).at("z") == 3);
 	}
 
-	auto initial_word = search::get_canonical_word(plant.get_initial_configuration(),
-										   ata.get_initial_configuration(),
-										   2,
-										   true,
-										   clock_constraints);
-	
-	CHECK(initial_word ==
-		CanonicalABWord{
-			{PlantZoneState{Location{{"OPEN", "FAR"}}, "c_1", zone_all},
-			 PlantZoneState{Location{{"OPEN", "FAR"}}, "t", zone_all},
-			 ATAZoneState{logic::MTLFormula{AP{"l0"}}, zone_all}}
-		}
-	);
+	dbm.conjunct("x", c_ge3);
+	dbm.conjunct("x", c_le9);
+	dbm.conjunct("y", c_eq3);
+	dbm.conjunct("z", c_eq3);
 
-	std::multimap<std::string, CanonicalABWord> next1 = search::get_next_canonical_words<TimedAutomaton, std::string, std::string, false>()(
-		plant, ata, {plant.get_initial_configuration(), ata.get_initial_configuration()}, 0, 2, true
-	);
+	SECTION("Correct initialization") {
 
-	CHECK(next1 == std::multimap<std::string, CanonicalABWord>{
-		{
-			"start_close_1", 
-			CanonicalABWord{
-				{PlantZoneState{Location{{"CLOSING", "FAR"}}, "c_1", zone_all},
-				 PlantZoneState{Location{{"CLOSING", "FAR"}}, "t", zone_all},
-				 ATAZoneState{mtl_ata_translation::get_sink<std::string>(), zone_all}}
-			}
-		}
-	});
+		INFO(dbm);
+		
+		CHECK(dbm.at(0, 0) == DBM_Entry{0, true});
+		CHECK(dbm.at("x", "x") == DBM_Entry{0, true});
+		CHECK(dbm.at("y", "y") == DBM_Entry{0, true});
+		CHECK(dbm.at("z", "z") == DBM_Entry{0, true});
+
+		CHECK(dbm.at(0, "x") == DBM_Entry{-3, true});
+		CHECK(dbm.at(0, "y") == DBM_Entry{-3, true});
+		CHECK(dbm.at(0, "z") == DBM_Entry{-3, true});
+
+		CHECK(dbm.at("x", 0) == DBM_Entry{9, true});
+		CHECK(dbm.at("y", 0) == DBM_Entry{3, true});
+		CHECK(dbm.at("z", 0) == DBM_Entry{3, true});
+
+		CHECK(dbm.at("x", "y") == DBM_Entry{6, true});
+		CHECK(dbm.at("y", "x") == DBM_Entry{0, true});
+
+		CHECK(dbm.at("x", "z") == DBM_Entry{6, true});
+		CHECK(dbm.at("z", "x") == DBM_Entry{0, true});
+
+		CHECK(dbm.at("y", "z") == DBM_Entry{0, true});
+		CHECK(dbm.at("z", "y") == DBM_Entry{0, true});
+	}
+
+	dbm.delay();
+
+	SECTION("Correct Delay") {
+
+		INFO(dbm);
+
+		CHECK(dbm.at(0, 0) == DBM_Entry{0, true});
+		CHECK(dbm.at("x", "x") == DBM_Entry{0, true});
+		CHECK(dbm.at("y", "y") == DBM_Entry{0, true});
+		CHECK(dbm.at("z", "z") == DBM_Entry{0, true});
+
+		CHECK(dbm.at(0, "x") == DBM_Entry{-3, true});
+		CHECK(dbm.at(0, "y") == DBM_Entry{-3, true});
+		CHECK(dbm.at(0, "z") == DBM_Entry{-3, true});
+
+		CHECK(dbm.at("x", 0).infinity_);
+		CHECK(dbm.at("y", 0).infinity_);
+		CHECK(dbm.at("z", 0).infinity_);
+
+		CHECK(dbm.at("x", "y") == DBM_Entry{6, true});
+		CHECK(dbm.at("y", "x") == DBM_Entry{0, true});
+
+		CHECK(dbm.at("x", "z") == DBM_Entry{6, true});
+		CHECK(dbm.at("z", "x") == DBM_Entry{0, true});
+
+		CHECK(dbm.at("y", "z") == DBM_Entry{0, true});
+		CHECK(dbm.at("z", "y") == DBM_Entry{0, true});
+	}
+
+	std::multimap<std::string, automata::ClockConstraint> new_constraints1{ {"x", c_gt5}, {"y", c_gt5} };
+
+	dbm.conjunct(new_constraints1);
+
+	SECTION("Correct new Constraints") {
+
+		INFO(dbm);
+
+		CHECK(dbm.at(0, 0) == DBM_Entry{0, true});
+		CHECK(dbm.at("x", "x") == DBM_Entry{0, true});
+		CHECK(dbm.at("y", "y") == DBM_Entry{0, true});
+		CHECK(dbm.at("z", "z") == DBM_Entry{0, true});
+
+		CHECK(dbm.at(0, "x") == DBM_Entry{-5, false});
+		CHECK(dbm.at(0, "y") == DBM_Entry{-5, false});
+		CHECK(dbm.at(0, "z") == DBM_Entry{-5, false});
+
+		CHECK(dbm.at("x", 0).infinity_);
+		CHECK(dbm.at("y", 0).infinity_);
+		CHECK(dbm.at("z", 0).infinity_);
+
+		CHECK(dbm.at("x", "y") == DBM_Entry{6, true});
+		CHECK(dbm.at("y", "x") == DBM_Entry{0, true});
+
+		CHECK(dbm.at("x", "z") == DBM_Entry{6, true});
+		CHECK(dbm.at("z", "x") == DBM_Entry{0, true});
+
+		CHECK(dbm.at("y", "z") == DBM_Entry{0, true});
+		CHECK(dbm.at("z", "y") == DBM_Entry{0, true});
+	}
+
+	SECTION("Correct Inconsistency") {
+		Zone_DBM new_dbm{{"x"}, 10};
+
+		new_dbm.conjunct("x", c_eq0);
+
+		new_dbm.conjunct("x", c_eq3);
+
+		INFO(new_dbm);
+
+		CHECK(!new_dbm.is_consistent());
+	}
+
+	SECTION("Checking resulting Zone_slices") {
+		CHECK(dbm.get_zone_slice("x") == zones::Zone_slice{5, 9, true, false, 9});
+		CHECK(dbm.get_zone_slice("y") == zones::Zone_slice{5, 9, true, false, 9});
+		CHECK(dbm.get_zone_slice("z") == zones::Zone_slice{5, 9, true, false, 9});
+
+		Zone_DBM new_dbm{clocks, 5};
+
+		CHECK(new_dbm.get_zone_slice("x") == zones::Zone_slice{0, 5, false, false, 5});
+		CHECK(new_dbm.get_zone_slice("y") == zones::Zone_slice{0, 5, false, false, 5});
+		CHECK(new_dbm.get_zone_slice("z") == zones::Zone_slice{0, 5, false, false, 5});
+
+		new_dbm.conjunct("x", c_eq0);
+
+		CHECK(new_dbm.get_zone_slice("x") == zones::Zone_slice{0, 0, false, false, 5});
+	}
+
+	SECTION("Checking exceeding max constant and normalization") {
+		Zone_DBM new_dbm{clocks, 5};
+
+		new_dbm.conjunct("y", c_eq0);
+		new_dbm.conjunct("z", c_eq0);
+
+		new_dbm.delay();
+
+		new_dbm.conjunct("y", c_ge15);
+
+		CHECK(new_dbm.at(0, "y") == DBM_Entry{-5, false});
+		CHECK(new_dbm.at(0, "z") == DBM_Entry{-5, false});
+
+		new_dbm.conjunct("z", c_le14);
+
+		CHECK(new_dbm.at("y", 0).infinity_);
+		CHECK(new_dbm.at("z", 0).infinity_);
+
+		CHECK(new_dbm.get_zone_slice("x") == zones::Zone_slice{0, 5, false, false, 5});
+		CHECK(new_dbm.get_zone_slice("y") == zones::Zone_slice{5, 5, true, false, 5});
+		CHECK(new_dbm.get_zone_slice("z") == zones::Zone_slice{5, 5, true, false, 5});
+	}
 }
 
 #if true
@@ -543,6 +511,9 @@ TEST_CASE("Railroad example using zones", "[zones]")
 	CAPTURE(plant);
 	CAPTURE(ata);
 	const unsigned int K = std::max(plant.get_largest_constant(), spec.get_largest_constant());
+
+	CHECK(K == 2);
+
 	TreeSearch search{&plant,
 					  &ata,
 					  controller_actions,
@@ -630,7 +601,7 @@ TEST_CASE("Railroad example using zones", "[zones]")
 		std::filesystem::path tmp_file(tmp_filename);
 		visualization::search_tree_to_graphviz_interactive(search.get_root(), tmp_filename);
 	#else
-		visualization::search_tree_to_graphviz(*search.get_root(), false)
+		visualization::search_tree_to_graphviz(*search.get_root(), true)
 		  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
 	#endif
 	
