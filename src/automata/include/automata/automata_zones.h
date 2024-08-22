@@ -52,13 +52,16 @@ namespace tacos::zones {
 		}
 
 		/** Construct using a ClockConstraint, the actual definition of a zone */
-		Zone_slice(automata::ClockConstraint clock_constraint, Endpoint max_constant)
+		Zone_slice(automata::ClockConstraint clock_constraint, Endpoint max_constant) :
+			lower_bound_(0), 
+			upper_bound_(0), 
+			lower_isOpen_(false), 
+			upper_isOpen_(false),
+			max_constant_(max_constant)
 		{
 			Endpoint constant = std::visit([](const auto &atomic_clock_constraint)
 						  -> Time { return atomic_clock_constraint.get_comparand(); },
 						  clock_constraint); //Visit due to ClockConstraint being a variant
-
-			max_constant_ = max_constant;
 
 			std::optional<int> relation_opt = automata::get_relation_index(clock_constraint);
 			assert(relation_opt.has_value());

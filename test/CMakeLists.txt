@@ -203,7 +203,7 @@ if(TACOS_COVERAGE)
 endif()
 
 if(TACOS_BUILD_BENCHMARKS)
-  add_executable(tacos_benchmark benchmark.cpp benchmark_robot.cpp benchmark_railroad.cpp benchmark_conveyor_belt.cpp)
+  add_executable(tacos_benchmark benchmark.cpp benchmark_robot.cpp benchmark_railroad.cpp benchmark_conveyor_belt.cpp benchmark_zones.cpp)
   target_link_libraries(tacos_benchmark PRIVATE railroad mtl_ata_translation search benchmark::benchmark)
 
   if(TACOS_BUILD_LARGE_BENCHMARKS)

@@ -603,24 +603,26 @@ public:
 
 			for(const auto &start_state : start_states) {
 				//Get a valid transition
-				auto t = std::find_if(ata_->get_transitions().cbegin(), ata_->get_transitions().cend(), [&](const auto &t) {
-					return t.source_ == start_state.location && t.symbol_ == logic::AtomicProposition{symbol};
-				});
-				if (t == ata_->get_transitions().end()) {
-					continue;
+				if constexpr (!use_location_constraints) {
+					auto t = std::find_if(ata_->get_transitions().cbegin(), ata_->get_transitions().cend(), [&](const auto &t) {
+						return t.source_ == start_state.location && t.symbol_ == logic::AtomicProposition{symbol};
+					});
+					if (t == ata_->get_transitions().end()) {
+						continue;
+					}
+
+					//1. Intersect Zone for the minimal model
+					auto intersected_zone = start_state.symbolic_valuation;
+
+					auto clock_constraints = t->get_clock_constraints();
+					for(const auto &constraint : clock_constraints) {
+						intersected_zone.conjunct(constraint);
+					}
+
+					//Minimal Models for this state and transition
+					std::set<ATAConfiguration> new_state = t->get_minimal_models(intersected_zone);
+					models.push_back(new_state);
 				}
-
-				//1. Intersect Zone for the minimal model
-				auto intersected_zone = start_state.symbolic_valuation;
-
-				auto clock_constraints = t->get_clock_constraints();
-				for(const auto &constraint : clock_constraints) {
-					intersected_zone.conjunct(constraint);
-				}
-
-				//Minimal Models for this state and transition
-				std::set<ATAConfiguration> new_state = t->get_minimal_models(intersected_zone);
-				models.push_back(new_state);
 			}
 
 			//The model is empty, i.e. no meaningful transition could be made
