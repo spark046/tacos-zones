@@ -37,4 +37,63 @@ TEST_CASE("Clock implicit conversion to time", "[automata]")
 	CHECK(Clock{0.1} == Time{0.1});
 }
 
+TEST_CASE("Conjunction of Clock constraint satisfiability", "[automata]")
+{
+	std::multimap<std::string, automata::ClockConstraint> constraints1{
+		{"x", automata::AtomicClockConstraintT<std::less<Time>>(3)},
+		{"x", automata::AtomicClockConstraintT<std::less_equal<Time>>(5)},
+		{"x", automata::AtomicClockConstraintT<std::greater_equal<Time>>(2)},
+		{"y", automata::AtomicClockConstraintT<std::less<Time>>(2)},
+		{"y", automata::AtomicClockConstraintT<std::greater_equal<Time>>(2)}
+	};
+
+	CHECK(!automata::is_satisfiable(constraints1));
+
+	std::multimap<std::string, automata::ClockConstraint> constraints2{
+		{"x", automata::AtomicClockConstraintT<std::less<Time>>(3)},
+		{"x", automata::AtomicClockConstraintT<std::less_equal<Time>>(5)},
+		{"x", automata::AtomicClockConstraintT<std::equal_to<Time>>(2)},
+		{"y", automata::AtomicClockConstraintT<std::less_equal<Time>>(2)},
+		{"y", automata::AtomicClockConstraintT<std::greater_equal<Time>>(2)}
+	};
+
+	CHECK(automata::is_satisfiable(constraints2));
+
+	std::multimap<std::string, automata::ClockConstraint> constraints3{
+		{"x", automata::AtomicClockConstraintT<std::less<Time>>(3)},
+		{"y", automata::AtomicClockConstraintT<std::less<Time>>(4)},
+		{"y", automata::AtomicClockConstraintT<std::greater_equal<Time>>(3)},
+	};
+
+	CHECK(automata::is_satisfiable(constraints3));
+
+	std::multimap<std::string, automata::ClockConstraint> constraints4{
+		{"x", automata::AtomicClockConstraintT<std::less<Time>>(3)},
+		{"y", automata::AtomicClockConstraintT<std::equal_to<Time>>(4)},
+		{"y", automata::AtomicClockConstraintT<std::greater_equal<Time>>(3)},
+	};
+
+	CHECK(automata::is_satisfiable(constraints4));
+
+	std::multimap<std::string, automata::ClockConstraint> constraints5{
+		{"y", automata::AtomicClockConstraintT<std::less_equal<Time>>(3)},
+		{"y", automata::AtomicClockConstraintT<std::greater_equal<Time>>(3)}
+	};
+
+	CHECK(automata::is_satisfiable(constraints5));
+
+	std::multimap<std::string, automata::ClockConstraint> constraints6{
+		{"y", automata::AtomicClockConstraintT<std::equal_to<Time>>(3)}
+	};
+
+	CHECK(automata::is_satisfiable(constraints6));
+
+	std::multimap<std::string, automata::ClockConstraint> constraints7{
+		{"y", automata::AtomicClockConstraintT<std::equal_to<Time>>(3)},
+		{"y", automata::AtomicClockConstraintT<std::greater<Time>>(3)}
+	};
+
+	CHECK(!automata::is_satisfiable(constraints7));
+}
+
 } // namespace

@@ -183,6 +183,9 @@ private:
 /** Check if the given clock constraints is satisfied by the given clock valuation. */
 bool is_satisfied(const ClockConstraint &constraint, const ClockValuation &valuation);
 
+/** CHeck whether this set of clock constraints is satisfiable, i.e. there are no contradictions */
+bool is_satisfiable(const std::multimap<std::string, ClockConstraint> &constraints);
+
 /** Get an index corresponding to the operator of the clock constraint. This is useful to compare
  * clock constraints. */
 inline std::optional<std::size_t>

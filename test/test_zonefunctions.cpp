@@ -7,6 +7,7 @@
 #include "automata/ta_regions.h"
 
 #include "search/search.h"
+#include "search/verify_ta_controller.h"
 
 
 //TODO: Figure out what is actually necessary, currently just copied from test_railroad.cpp
@@ -467,7 +468,7 @@ TEST_CASE("Difference Bound Matrix tests", "[zones]")
 TEST_CASE("Railroad example using zones", "[zones]")
 {
 	using Location [[maybe_unused]] = automata::ta::Location<std::vector<std::string>>;
-	using TimedAutomaton [[maybe_unused]] = automata::ta::TimedAutomaton<std::vector<std::string>, std::string>;
+	using TimedAutomaton [[maybe_unused]] = automata::ta::TimedAutomaton<Location, std::string>;
 
 	using TAConfiguration [[maybe_unused]] = PlantConfiguration<Location>;
 
@@ -528,6 +529,12 @@ TEST_CASE("Railroad example using zones", "[zones]")
 	
 	search.build_tree(true);
 	CHECK(search.get_root()->label == search::NodeLabel::TOP);
+
+	auto controller = controller_synthesis::create_controller(
+						search.get_root(), controller_actions, environment_actions, 2
+						);
+
+	search::verify_ta_controller(plant, controller, K);
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SANITY CHECKS~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	/* std::multimap<std::string, automata::ClockConstraint> clock_constraints;
@@ -607,8 +614,7 @@ TEST_CASE("Railroad example using zones", "[zones]")
 		  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
 	#endif
 	
-	visualization::ta_to_graphviz(controller_synthesis::create_controller(
-									search.get_root(), controller_actions, environment_actions, 2),
+	visualization::ta_to_graphviz(controller,
 								  false)
 	  .render_to_file(fmt::format("railroad{}_controller.pdf", num_crossings));
 	#endif
