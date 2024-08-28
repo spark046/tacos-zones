@@ -14,21 +14,24 @@ using automata::ta::TimedAutomaton;
 
 /** Creates a synchronous product between a Plant TA and a Controller TA */
 template <typename LocationT, typename ActionType, typename ConstraintSymbolType>
-TimedAutomaton<std::pair<LocationT, std::set<CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>>, ActionType>
+TimedAutomaton<std::pair<automata::ta::Location<LocationT>, automata::ta::Location<std::set<CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>>>, ActionType>
 create_product(const TimedAutomaton<LocationT, ActionType> &ta,
 			   const TimedAutomaton<std::set<search::CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>, ActionType> &controller)
 {
 	//Saving mouthfuls
 	using Controller_Location = std::set<search::CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>;
-	using TA = TimedAutomaton<std::pair<LocationT, Controller_Location>, ActionType>;
-	using Location = automata::ta::Location<std::pair<LocationT, Controller_Location>>;
-	using Transition = automata::ta::Transition<LocationT, ActionType>;
+
+	//For Product TA
+	using LocationType = std::pair<automata::ta::Location<LocationT>, automata::ta::Location<Controller_Location>>;
+	using TA = TimedAutomaton<LocationType, ActionType>;
+	using Location = automata::ta::Location<LocationType>;
+	using Transition = automata::ta::Transition<LocationType, ActionType>;
 
 	std::set<Location> locations;
-	std::set<Location> accepting_locations;
 	std::set<ActionType> alphabet;
+	std::set<Location> accepting_locations;
 	std::set<std::string> clocks;
-	std::set<Transition> transitions;
+	std::vector<Transition> transitions;
 
 	//Get cartesian product of all locations
 	for(const auto &ta_location : ta.get_locations()) {
@@ -57,11 +60,11 @@ create_product(const TimedAutomaton<LocationT, ActionType> &ta,
 	//Get transitions
 	for(const auto &location : locations) {
 		auto [ta_trans_curr, ta_trans_end] =
-			ta.get_transitions().equal_range(automata::ta::Location<LocationT>{location.get().first});
+			ta.get_transitions().equal_range(location.get().first);
 		auto [controller_trans_curr, controller_trans_end] =
-			controller.get_transitions().equal_range(automata::ta::Location<Controller_Location>{location.get().second});
+			controller.get_transitions().equal_range(location.get().second);
 
-		//No transitions from this location for either Plant or Controller
+		//No transitions from this location for neither Plant nor Controller
 		if(ta_trans_curr == ta_trans_end || controller_trans_curr == controller_trans_end) {
 			continue;
 		}
@@ -101,7 +104,7 @@ create_product(const TimedAutomaton<LocationT, ActionType> &ta,
 								   controller_trans.get_reset().begin(), controller_trans.get_reset().end(),
 								   inserter(resets, resets.end()));
 
-					transitions.insert(Transition(
+					transitions.push_back(Transition(
 						Location{std::make_pair(ta_trans.get_source(), controller_trans.get_source())},
 						action,
 						Location{std::make_pair(ta_trans.get_target(), controller_trans.get_target())},
@@ -134,12 +137,16 @@ template <typename LocationT, typename ActionType, typename ConstraintSymbolType
 bool
 verify_ta_controller(const TimedAutomaton<LocationT, ActionType> &ta,
 					 const TimedAutomaton<std::set<search::CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>, ActionType> &controller,
+					 const logic::MTLFormula<ConstraintSymbolType> &spec,
 					 RegionIndex K)
 {
 	//Saving mouthfuls
 	using Controller_Location = std::set<search::CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>;
-	using TA = TimedAutomaton<std::pair<LocationT, Controller_Location>, ActionType>;
-	using Location = automata::ta::Location<std::pair<LocationT, Controller_Location>>;
+
+	//For Product TA
+	using LocationType = std::pair<automata::ta::Location<LocationT>, automata::ta::Location<Controller_Location>>;
+	using TA = TimedAutomaton<LocationType, ActionType>;
+	using Location = automata::ta::Location<LocationType>;
 
 	//~~~~~~~1. Create synchronous product and build the search tree~~~~~~~~~
 
@@ -154,14 +161,15 @@ verify_ta_controller(const TimedAutomaton<LocationT, ActionType> &ta,
 
 	//1.3 Build Search Tree
 	//Empty ATA
-	automata::ata::AlternatingTimedAutomaton<logic::MTLFormula<ConstraintSymbolType>,
-											 logic::AtomicProposition<ConstraintSymbolType>>
-										ata = mtl_ata_translation::translate(logic::MTLFormula<ConstraintSymbolType>::TRUE(), {});
+	std::set<logic::AtomicProposition<ConstraintSymbolType>> ata_actions;
+	ata_actions.insert(actions.begin(), actions.end());
+
+	auto ata = mtl_ata_translation::translate(spec, ata_actions);
 	TreeSearch<Location, ActionType, ConstraintSymbolType> search{
 		&product,
 		&ata,
 		{},
-		product.get_alphabet(),
+		actions,
 		K
 	};
 
@@ -170,4 +178,26 @@ verify_ta_controller(const TimedAutomaton<LocationT, ActionType> &ta,
 	return search.get_root()->label == NodeLabel::TOP;
 }
 
+/** Print a synchronous product's location. */
+template <typename LocationT, typename ConstraintSymbolType>
+std::ostream &
+operator<<(std::ostream &os, const std::pair<
+	automata::ta::Location<LocationT>,
+	automata::ta::Location<std::set<search::CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>>> &location)
+{
+	os << "(" << location.first << ", " << location.second << ")";
+	return os;
+}
+
 } //tacos::search
+
+namespace fmt {
+
+template <typename LocationT, typename ConstraintSymbolType>
+struct formatter<std::pair<
+	tacos::automata::ta::Location<LocationT>,
+	tacos::automata::ta::Location<std::set<tacos::search::CanonicalABWord<tacos::automata::ta::Location<LocationT>, ConstraintSymbolType>>>>> : ostream_formatter
+{
+};
+
+} // fmt

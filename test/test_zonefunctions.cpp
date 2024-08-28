@@ -509,10 +509,10 @@ TEST_CASE("Railroad example using zones", "[zones]")
 				   begin(environment_actions),
 				   end(environment_actions),
 				   inserter(actions, end(actions)));
-	CAPTURE(spec);
+	//CAPTURE(spec);
 	auto ata = mtl_ata_translation::translate(spec, actions);
-	CAPTURE(plant);
-	CAPTURE(ata);
+	//CAPTURE(plant);
+	//CAPTURE(ata);
 	const unsigned int K = std::max(plant.get_largest_constant(), spec.get_largest_constant());
 
 	CHECK(K == 2);
@@ -534,7 +534,7 @@ TEST_CASE("Railroad example using zones", "[zones]")
 						search.get_root(), controller_actions, environment_actions, 2
 						);
 
-	search::verify_ta_controller(plant, controller, K);
+	CHECK(search::verify_ta_controller(plant, controller, spec, K));
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SANITY CHECKS~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	/* std::multimap<std::string, automata::ClockConstraint> clock_constraints;
