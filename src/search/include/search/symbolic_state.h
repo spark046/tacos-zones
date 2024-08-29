@@ -301,6 +301,16 @@ struct PlantZoneState : ZoneState<LocationT>
 	}
 };
 
+/** Turns an MTLFormula to a string. Used for ATA clock names */
+template <typename ConstraintSymbolType>
+std::string
+ata_formula_to_string(logic::MTLFormula<ConstraintSymbolType> formula)
+{
+	std::stringstream s;
+	s << formula;
+	return s.str();
+}
+
 /** The zone state of an ATA state
  * 
  * An ATAZoneState is a pair (location, set of clock constraints) */
@@ -312,13 +322,13 @@ struct ATAZoneState : ZoneState<logic::MTLFormula<ConstraintSymbolType>>
 	using ConstraintSet = std::multimap<std::string, automata::ClockConstraint>;
 
 	ATAZoneState(logic::MTLFormula<ConstraintSymbolType> formula, ZoneSlice zone_slice) :
-	ZoneState<logic::MTLFormula<ConstraintSymbolType>>::ZoneState(formula, "", zone_slice)
+	ZoneState<logic::MTLFormula<ConstraintSymbolType>>::ZoneState(formula, ata_formula_to_string(formula), zone_slice)
 	{
 
 	}
 
 	ATAZoneState(logic::MTLFormula<ConstraintSymbolType> formula, ConstraintSet constraints, Endpoint max_constant) :
-	ZoneState<logic::MTLFormula<ConstraintSymbolType>>::ZoneState(formula, "", constraints, max_constant)
+	ZoneState<logic::MTLFormula<ConstraintSymbolType>>::ZoneState(formula, ata_formula_to_string(formula), constraints, max_constant)
 	{
 
 	}

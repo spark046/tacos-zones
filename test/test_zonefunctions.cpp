@@ -462,6 +462,171 @@ TEST_CASE("Difference Bound Matrix tests", "[zones]")
 		CHECK(new_dbm.get_zone_slice("y") == zones::Zone_slice{5, 5, true, false, 5});
 		CHECK(new_dbm.get_zone_slice("z") == zones::Zone_slice{5, 5, true, false, 5});
 	}
+
+	SECTION("Checking Inserting/Removing Clocks") {
+		Zone_DBM new_dbm{clocks, 20};
+
+		new_dbm.conjunct("x", c_ge3);
+		new_dbm.conjunct("x", c_le14);
+		new_dbm.conjunct("y", c_eq0);
+		new_dbm.conjunct("z", c_eq0);
+
+		//Sanity check
+		CHECK(new_dbm.at(0, 0) == DBM_Entry{0, true});
+		CHECK(new_dbm.at("x", "x") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("y", "y") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", "z") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at(0, "x") == DBM_Entry{-3, true});
+		CHECK(new_dbm.at(0, "y") == DBM_Entry{0, true});
+		CHECK(new_dbm.at(0, "z") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at("x", 0) == DBM_Entry{14, true});
+		CHECK(new_dbm.at("y", 0) == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", 0) == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at("x", "y") == DBM_Entry{14, true});
+		CHECK(new_dbm.at("y", "x") == DBM_Entry{-3, true});
+
+		CHECK(new_dbm.at("x", "z") == DBM_Entry{14, true});
+		CHECK(new_dbm.at("z", "x") == DBM_Entry{-3, true});
+
+		CHECK(new_dbm.at("y", "z") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", "y") == DBM_Entry{0, true});
+
+		//Add new clock
+		new_dbm.add_clock("a");
+		new_dbm.conjunct("a", c_eq0);
+
+		CHECK(new_dbm.at(0, 0) == DBM_Entry{0, true});
+		CHECK(new_dbm.at("x", "x") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("y", "y") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", "z") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("a", "a") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at(0, "x") == DBM_Entry{-3, true});
+		CHECK(new_dbm.at(0, "y") == DBM_Entry{0, true});
+		CHECK(new_dbm.at(0, "z") == DBM_Entry{0, true});
+		CHECK(new_dbm.at(0, "a") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at("x", 0) == DBM_Entry{14, true});
+		CHECK(new_dbm.at("y", 0) == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", 0) == DBM_Entry{0, true});
+		CHECK(new_dbm.at("a", 0) == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at("x", "y") == DBM_Entry{14, true});
+		CHECK(new_dbm.at("y", "x") == DBM_Entry{-3, true});
+
+		CHECK(new_dbm.at("x", "z") == DBM_Entry{14, true});
+		CHECK(new_dbm.at("z", "x") == DBM_Entry{-3, true});
+
+		CHECK(new_dbm.at("x", "a") == DBM_Entry{14, true});
+		CHECK(new_dbm.at("a", "x") == DBM_Entry{-3, true});
+
+		CHECK(new_dbm.at("y", "z") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", "y") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at("y", "a") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("a", "y") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at("z", "a") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("a", "z") == DBM_Entry{0, true});
+
+		new_dbm.delay();
+
+		new_dbm.conjunct("a", c_le9);
+		new_dbm.conjunct("x", c_le14);
+
+		CHECK(new_dbm.at(0, 0) == DBM_Entry{0, true});
+		CHECK(new_dbm.at("x", "x") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("y", "y") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", "z") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("a", "a") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at(0, "x") == DBM_Entry{-3, true});
+		CHECK(new_dbm.at(0, "y") == DBM_Entry{0, true});
+		CHECK(new_dbm.at(0, "z") == DBM_Entry{0, true});
+		CHECK(new_dbm.at(0, "a") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at("x", 0) == DBM_Entry{14, true});
+		CHECK(new_dbm.at("y", 0) == DBM_Entry{9, true});
+		CHECK(new_dbm.at("z", 0) == DBM_Entry{9, true});
+		CHECK(new_dbm.at("a", 0) == DBM_Entry{9, true});
+
+		CHECK(new_dbm.at("x", "y") == DBM_Entry{14, true});
+		CHECK(new_dbm.at("y", "x") == DBM_Entry{-3, true});
+
+		CHECK(new_dbm.at("x", "z") == DBM_Entry{14, true});
+		CHECK(new_dbm.at("z", "x") == DBM_Entry{-3, true});
+
+		CHECK(new_dbm.at("x", "a") == DBM_Entry{14, true});
+		CHECK(new_dbm.at("a", "x") == DBM_Entry{-3, true});
+
+		CHECK(new_dbm.at("y", "z") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", "y") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at("y", "a") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("a", "y") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at("z", "a") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("a", "z") == DBM_Entry{0, true});
+
+		new_dbm.remove_clock("a");
+
+		CHECK(new_dbm.at(0, 0) == DBM_Entry{0, true});
+		CHECK(new_dbm.at("x", "x") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("y", "y") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", "z") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at(0, "x") == DBM_Entry{-3, true});
+		CHECK(new_dbm.at(0, "y") == DBM_Entry{0, true});
+		CHECK(new_dbm.at(0, "z") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at("x", 0) == DBM_Entry{14, true});
+		CHECK(new_dbm.at("y", 0) == DBM_Entry{9, true});
+		CHECK(new_dbm.at("z", 0) == DBM_Entry{9, true});
+
+		CHECK(new_dbm.at("x", "y") == DBM_Entry{14, true});
+		CHECK(new_dbm.at("y", "x") == DBM_Entry{-3, true});
+
+		CHECK(new_dbm.at("x", "z") == DBM_Entry{14, true});
+		CHECK(new_dbm.at("z", "x") == DBM_Entry{-3, true});
+
+		CHECK(new_dbm.at("y", "z") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", "y") == DBM_Entry{0, true});
+
+		new_dbm.remove_clock("y");
+
+		new_dbm.reset("x");
+
+		CHECK(new_dbm.at(0, 0) == DBM_Entry{0, true});
+		CHECK(new_dbm.at("x", "x") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", "z") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at(0, "x") == DBM_Entry{0, true});
+		CHECK(new_dbm.at(0, "z") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at("x", 0) == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", 0) == DBM_Entry{9, true});
+
+		CHECK(new_dbm.at("x", "z") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", "x") == DBM_Entry{9, true});
+
+		new_dbm.delay();
+
+		CHECK(new_dbm.at(0, 0) == DBM_Entry{0, true});
+		CHECK(new_dbm.at("x", "x") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", "z") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at(0, "x") == DBM_Entry{0, true});
+		CHECK(new_dbm.at(0, "z") == DBM_Entry{0, true});
+
+		CHECK(new_dbm.at("x", 0).infinity_);
+		CHECK(new_dbm.at("z", 0).infinity_);
+
+		CHECK(new_dbm.at("x", "z") == DBM_Entry{0, true});
+		CHECK(new_dbm.at("z", "x") == DBM_Entry{9, true});
+	}
 }
 
 #if true
@@ -509,10 +674,10 @@ TEST_CASE("Railroad example using zones", "[zones]")
 				   begin(environment_actions),
 				   end(environment_actions),
 				   inserter(actions, end(actions)));
-	//CAPTURE(spec);
+	CAPTURE(spec);
 	auto ata = mtl_ata_translation::translate(spec, actions);
-	//CAPTURE(plant);
-	//CAPTURE(ata);
+	CAPTURE(plant);
+	CAPTURE(ata);
 	const unsigned int K = std::max(plant.get_largest_constant(), spec.get_largest_constant());
 
 	CHECK(K == 2);
@@ -533,7 +698,7 @@ TEST_CASE("Railroad example using zones", "[zones]")
 	auto controller = controller_synthesis::create_controller(
 						search.get_root(), controller_actions, environment_actions, 2
 						);
-
+	
 	CHECK(search::verify_ta_controller(plant, controller, spec, K));
 	
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SANITY CHECKS~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -610,7 +775,7 @@ TEST_CASE("Railroad example using zones", "[zones]")
 		std::filesystem::path tmp_file(tmp_filename);
 		visualization::search_tree_to_graphviz_interactive(search.get_root(), tmp_filename);
 	#else
-		visualization::search_tree_to_graphviz(*search.get_root(), false)
+		visualization::search_tree_to_graphviz(*search.get_root(), true)
 		  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
 	#endif
 	

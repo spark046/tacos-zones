@@ -391,10 +391,13 @@ namespace tacos::zones {
 
 		/** Constructs a new Graph for this set of clocks. Each edge is labeled with infinity */
 		Graph(std::set<std::string> clocks) {
+			//TODO Verbose name to avoid collision, "temporary", although I don't know a better solution
+			clock_to_index.push_back("zero_clock_please_do_not_use_this_name_80798sand8sa7s8a7dms90amdsvxcy9x0cy90c");
+
 			//Assign each clock an index:
 			int k = 1;
 			for(const auto &clock : clocks) {
-				clock_to_index[clock] = k;
+				clock_to_index.push_back(clock);
 				k++;
 			}
 
@@ -415,12 +418,36 @@ namespace tacos::zones {
 			return matrix_.size();
 		}
 
-		/** Get the index as which */
+		/** Adds a new clock to this graph. This results in recalculating the Adjacency Matrix 
+		 * 
+		 * @return True if clock successfully added
+		*/
+		bool add_clock(std::string clock_name);
+
+		/** Unbinds a clock, setting everything in its row and column to infinity */
+		bool unbound_clock(std::string clock_name);
+
+		/** Removes clock if it exists
+		 * 
+		 * @return True if clock successfully removed, false if clock didn't exist or something went wrong
+		 */
+		bool remove_clock(std::string clock_name);
+
+		/** Returns whether the given clock already exists in this DBM graph */
+		bool has_clock(std::string clock_name);
+
+		/** Get the index as which this clock is saved at */
 		std::size_t
 		get_index_of_clock(std::string clock) const
 		{
-			return clock_to_index.at(clock);
+			auto it = std::find(clock_to_index.begin(), clock_to_index.end(), clock);
+			assert(it != clock_to_index.end());
+
+			return std::distance(clock_to_index.begin(), it);
 		}
+
+		/** Returns a vector of all clocks except for the zero clock */
+		std::vector<std::string> get_clocks() const;
 
 		/** Get the DBM_Entry at these indices */
 		DBM_Entry& get(std::size_t x, std::size_t y)
@@ -431,19 +458,19 @@ namespace tacos::zones {
 		/** Get the DBM_Entry of these clocks */
 		DBM_Entry& get(std::string clock1, std::string clock2)
 		{
-			return matrix_(clock_to_index[clock1], clock_to_index[clock2]);
+			return matrix_(get_index_of_clock(clock1), get_index_of_clock(clock2));
 		}
 
 		/** Get the DBM_Entry of this index and clock */
 		DBM_Entry& get(std::size_t x, std::string clock)
 		{
-			return matrix_(x, clock_to_index[clock]);
+			return matrix_(x, get_index_of_clock(clock));
 		}
 
 		/** Get the DBM_Entry of this clock and index */
 		DBM_Entry& get(std::string clock, std::size_t y)
 		{
-			return matrix_(clock_to_index[clock], y);
+			return matrix_(get_index_of_clock(clock), y);
 		}
 
 		/** Get the DBM_Entry as a value at these indices (For constness, mostly testing) */
@@ -494,7 +521,7 @@ namespace tacos::zones {
 
 		private:
 		Matrix matrix_;
-		std::map<std::string, std::size_t> clock_to_index;
+		std::vector<std::string> clock_to_index;
 	};
 
 	/** Class for storing zones as a Difference Bound Matrix
@@ -580,11 +607,34 @@ namespace tacos::zones {
 		/** Normalize this DBM according to max_constant_ */
 		void normalize();
 
+		/** Returns a vector containing all clocks except for the zero clock within this DBM */
+		std::vector<std::string> get_clocks() const;
+
 		/** Check whether this zone is consistent, i.e. it has no empty sets.
 		 * 
 		 * This is accomplished by always marking inconsistent DBMs with a negative value at D_00
 		 */
 		bool is_consistent();
+
+		/** Adds a new clock.
+		 * 
+		 * @return Returns True if successful, false if clock already exists or something bad happened
+		 */
+		bool add_clock(std::string clock_name);
+
+		/** Creates a copy of a clock. This means the new clock will have the exact same difference constraints
+		 * 
+		 * @param new_clock_name Name of the new clock. If it already exists, then it is completely overwritten
+		 * @param clock_to_copy Name of the old clock that is copied. Must exist
+		 * @return True if successful, false if something went wrong (e.g. clock already exists, etc.)
+		 */
+		bool copy_clock(std::string new_clock_name, std::string clock_to_copy);
+
+		/** Removes a clock.
+		 * 
+		 * @return True if successful, false if clock doesn't exist or something bad happened
+		 */
+		bool remove_clock(std::string clock_name);
 
 		/** For testing */
 		std::map<std::string, std::size_t>

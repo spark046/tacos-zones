@@ -352,7 +352,7 @@ get_canonical_word_zones(const CanonicalABWord<Location, ConstraintSymbolType> &
 			} else { //ATAZoneState
 				const auto &state = std::get<ATAZoneState<ConstraintSymbolType>>(symbol);
 
-				ret.insert( {"", state.symbolic_valuation} );
+				ret.insert( {ata_formula_to_string(state.location), state.symbolic_valuation} );
 			}
 		}
 	}
@@ -483,7 +483,7 @@ get_canonical_word(const PlantConfiguration<Location>           &plant_configura
 						const ATAState<ConstraintSymbolType> &s = std::get<ATAState<ConstraintSymbolType>>(w);
 
 						std::multimap<std::string, automata::ClockConstraint> zone =
-							zones::get_fulfilled_clock_constraints(clock_constraints, "", s.clock_valuation);
+							zones::get_fulfilled_clock_constraints(clock_constraints, ata_formula_to_string(s.location), s.clock_valuation);
 
 						return ATAZoneState<ConstraintSymbolType>(s.location,
 																  zone,

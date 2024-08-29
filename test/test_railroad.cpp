@@ -28,6 +28,8 @@
 #include "visualization/tree_to_graphviz.h"
 #include "visualization/interactive_tree_to_graphviz.h"
 
+#include "search/verify_ta_controller.h"
+
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include <spdlog/common.h>
@@ -78,6 +80,11 @@ TEST_CASE("Railroad", "[railroad]")
                     generate_heuristic<TreeSearch::Node>()};
 	search.build_tree(true);
 	CHECK(search.get_root()->label == NodeLabel::TOP);
+	auto controller = controller_synthesis::create_controller(
+						search.get_root(), controller_actions, environment_actions, 2
+						);
+	
+	CHECK(search::verify_ta_controller(plant, controller, spec, K));
 #ifdef HAVE_VISUALIZATION
 	visualization::search_tree_to_graphviz(*search.get_root(), true)
 	  .render_to_file(fmt::format("railroad{}.svg", num_crossings));

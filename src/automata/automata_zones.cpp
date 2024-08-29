@@ -6,6 +6,8 @@ namespace tacos::zones {
 	Zone_slice
 	Zone_DBM::get_zone_slice(std::string clock)
 	{
+		assert(graph_.has_clock(clock));
+
 		if(!is_consistent()) {
 			return Zone_slice{0, 0, true, true, max_constant_};
 		}
@@ -165,6 +167,7 @@ namespace tacos::zones {
 		return graph_.get(0, 0) == DBM_Entry{0, true};
 	}
 
+	//TODO This doesn't consider that old clocks may have been removed
 	RegionIndex
 	Zone_DBM::get_increment(Zone_DBM new_dbm) const
 	{
@@ -200,6 +203,52 @@ namespace tacos::zones {
 			//Make canonical by getting shortest paths
 			graph_.floyd_warshall();
 		}
+	}
+
+	std::vector<std::string>
+	Zone_DBM::get_clocks() const
+	{
+		return graph_.get_clocks();
+	}
+
+	bool
+	Zone_DBM::add_clock(std::string clock_name)
+	{
+		return graph_.add_clock(clock_name);
+	}
+
+	bool
+	Zone_DBM::copy_clock(std::string new_clock_name, std::string clock_to_copy)
+	{
+		//If same, then don't need to do anything
+		if(new_clock_name == clock_to_copy) {
+			return true;
+		}
+
+		if(!graph_.has_clock(clock_to_copy)) {
+			return false;
+		}
+
+		if(!graph_.has_clock(new_clock_name)) {
+			add_clock(new_clock_name);
+		} else {
+			graph_.unbound_clock(new_clock_name);
+		}
+
+		//Set the constraint new_clock - old_clock <= 0 AND old_clock - new_clock <= 0. This way the clocks are constrained to be the same
+		graph_.get(new_clock_name, clock_to_copy) = DBM_Entry{0, true};
+		graph_.get(clock_to_copy, new_clock_name) = DBM_Entry{0, true};
+
+		//Make canonical to fill the entries of the new clock
+		graph_.floyd_warshall();
+
+		return true;
+	}
+
+	bool
+	Zone_DBM::remove_clock(std::string clock_name)
+	{
+		return graph_.remove_clock(clock_name);
 	}
 
 	DBM_Entry
@@ -261,6 +310,126 @@ namespace tacos::zones {
 				}
 			}
 		}
+	}
+
+	bool
+	Graph::add_clock(std::string clock_name)
+	{
+		//Check whether clock already exists
+		if(has_clock(clock_name)) {
+			return false;
+		}
+
+		std::size_t old_size = size();
+		Matrix new_matrix = Matrix(old_size + 1);
+
+		//Copy the old matrix. New Rows and Columns are already unbounded, so no need to fill those in
+		for(std::size_t i = 0; i < old_size; i++) {
+			for(std::size_t j = 0; j < old_size; j++) {
+				new_matrix(i, j) = get_value(i, j);
+			}
+		}
+
+		//Update indices
+		clock_to_index.push_back(clock_name);
+
+		//Update Matrix
+		matrix_ = new_matrix;
+
+		//Get canonical form
+		floyd_warshall();
+
+		return true;
+	}
+
+	bool
+	Graph::unbound_clock(std::string clock_name)
+	{
+		//Check whether clock exists
+		if(!has_clock(clock_name)) {
+			return false;
+		}
+
+		std::size_t index = get_index_of_clock(clock_name);
+
+		for(std::size_t i = 0; i < size(); i++) {
+			matrix_(i, index) = DBM_Entry{true, 0, false};
+			matrix_(index, i) = DBM_Entry{true, 0, false};
+		}
+
+		floyd_warshall();
+
+		return true;
+	}
+
+	bool
+	Graph::remove_clock(std::string clock_name)
+	{
+		//TODO Fix the problem with removing clock leading to access to removed clocks
+		//For now just make the clock unbounded
+
+		unbound_clock(clock_name);
+
+		return true;
+		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Actual implementation~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+		//Check whether clock exists
+		if(!has_clock(clock_name)) {
+			return false;
+		}
+
+		std::size_t index_to_delete = get_index_of_clock(clock_name);
+
+		std::size_t old_size = size();
+		Matrix new_matrix = Matrix(old_size);
+
+		//Copy the old matrix up to the deleted clock
+		for(std::size_t i = 0; i < index_to_delete; i++) {
+			//Fill in top left corner
+			for(std::size_t j = 0; j < index_to_delete; j++) {
+				new_matrix(i, j) = matrix_.get(i, j);
+			}
+
+			//Fill in Top right and bottom left corner
+			for(std::size_t j = index_to_delete + 1; j < old_size; j++) {
+				new_matrix(i, j - 1) = matrix_.get(i, j);
+				new_matrix(j - 1, i) = matrix_.get(j, i);
+			}
+		}
+
+		//Fill in bottom right corner
+		for(std::size_t i = index_to_delete + 1; i < old_size; i++) {
+			for(std::size_t j = index_to_delete + 1; j < old_size; j++) {
+				new_matrix(i-1, j-1) = matrix_.get(i,j);
+			}
+		}
+
+		//Update Indices (Addition is for having a iterator)
+		clock_to_index.erase(clock_to_index.begin() + index_to_delete);
+
+		//Update Matrix
+		matrix_ = new_matrix;
+
+		//Make canonical
+		floyd_warshall();
+
+		return true;
+	}
+
+	std::vector<std::string> Graph::get_clocks() const
+	{
+		std::vector<std::string> ret;
+		for(std::size_t i = 1; i < size(); i++) {
+			ret.push_back(clock_to_index[i]);
+		}
+
+		return ret;
+	}
+
+	bool
+	Graph::has_clock(std::string clock_name)
+	{
+		return std::find(clock_to_index.begin(), clock_to_index.end(), clock_name) != clock_to_index.end();
 	}
 
 	RegionIndex

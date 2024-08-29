@@ -264,7 +264,7 @@ public:
 			for(auto clock = ta->get_clocks().begin(); clock != ta->get_clocks().end(); clock++) {
 				clock_constraints.insert({*clock, automata::AtomicClockConstraintT<std::equal_to<Time>>(0)});
 			}
-			clock_constraints.insert({"", automata::AtomicClockConstraintT<std::equal_to<Time>>(0)});
+			clock_constraints.insert({"l0", automata::AtomicClockConstraintT<std::equal_to<Time>>(0)});
 
 			tree_root_ = std::make_shared<Node>(
 			  std::set<CanonicalABWord<typename Plant::Location, ConstraintSymbolType>>{
@@ -612,16 +612,21 @@ public:
 					}
 
 					//1. Intersect Zone for the minimal model
-					auto intersected_zone = start_state.symbolic_valuation;
-
 					auto clock_constraints = t->get_clock_constraints();
 					for(const auto &constraint : clock_constraints) {
-						intersected_zone.conjunct(constraint);
+						new_dbm.at(symbol).conjunct(start_state.clock, constraint);
 					}
 
 					//Minimal Models for this state and transition
-					std::set<ATAConfiguration> new_state = t->get_minimal_models(intersected_zone);
-					models.push_back(new_state);
+					std::set<ATAConfiguration> new_configurations = t->get_minimal_models(new_dbm.at(symbol).get_zone_slice(start_state.clock));
+
+					for(const auto &configuration : new_configurations) {
+						for(const auto &state : configuration) {
+							new_dbm.at(symbol).copy_clock(ata_formula_to_string(state.location), start_state.clock);
+						}
+					}
+
+					models.push_back(new_configurations);
 				}
 			}
 
@@ -649,6 +654,10 @@ public:
 						std::set<ATAZoneState<ConstraintSymbolType>> zone_state_model;
 						for(const auto &raw_state : state_model) {
 							zone_state_model.insert(ATAZoneState<ConstraintSymbolType>{raw_state.location, raw_state.zone});
+							std::vector<automata::ClockConstraint> new_constraints = zones::get_clock_constraints_from_zone(raw_state.zone, 2*K_);
+							for(const auto &constraint : new_constraints) {
+								new_dbm.at(symbol).conjunct(ata_formula_to_string(raw_state.location), constraint);
+							}
 						}
 						ata_successors.insert({zone_state_model});
 					});
@@ -662,6 +671,10 @@ public:
 							std::set<ATAZoneState<ConstraintSymbolType>> zone_state_model;
 							for(const auto &raw_state : state_model) {
 								zone_state_model.insert(ATAZoneState<ConstraintSymbolType>{raw_state.location, raw_state.zone});
+								std::vector<automata::ClockConstraint> new_constraints = zones::get_clock_constraints_from_zone(raw_state.zone, 2*K_);
+								for(const auto &constraint : new_constraints) {
+									new_dbm.at(symbol).conjunct(ata_formula_to_string(raw_state.location), constraint);
+								}
 							}
 							auto expanded_configuration = configuration;
 							expanded_configuration.insert(zone_state_model.begin(), zone_state_model.end());
@@ -750,10 +763,26 @@ public:
 						}
 					}
 
+					//Remove all ata clocks that don't appear in this word
+					//auto ata_states = get_ata_symbols_from_canonical_word(new_word);
+					//for(const auto &clock_name : new_dbm.at(symbol).get_clocks()) {
+					//	bool exists_in_word = false;
+					//	for(const auto &ata_state : ata_states) {
+					//		if(clock_name == ata_state.clock) {
+					//			exists_in_word = true;
+					//			break;
+					//		}
+					//	}
+					//
+					//	if(!exists_in_word) {
+					//		new_dbm.at(symbol).remove_clock(clock_name);
+					//	}
+					//}
+
 					//Insert New Word
 					successors.insert( {symbol, new_word});
 
-					needed_increment[symbol] = old_dbm.get_increment(new_dbm[symbol]); //new_dbm calls since old_dbm is const, shouldn't matter
+					needed_increment[symbol] = old_dbm.get_increment(new_dbm[symbol]);
 				}
 			}
 		}
