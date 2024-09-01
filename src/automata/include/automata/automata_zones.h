@@ -434,7 +434,7 @@ namespace tacos::zones {
 		bool remove_clock(std::string clock_name);
 
 		/** Returns whether the given clock already exists in this DBM graph */
-		bool has_clock(std::string clock_name);
+		bool has_clock(std::string clock_name) const;
 
 		/** Get the index as which this clock is saved at */
 		std::size_t
@@ -577,7 +577,7 @@ namespace tacos::zones {
 		}
 
 		/** Get the Zone_slice of this clock */
-		Zone_slice get_zone_slice(std::string clock);
+		Zone_slice get_zone_slice(std::string clock) const;
 
 		/** Delays a DBM. Every Entry at graph_.get(i, 0) is set to infinity */
 		void delay();
@@ -614,7 +614,7 @@ namespace tacos::zones {
 		 * 
 		 * This is accomplished by always marking inconsistent DBMs with a negative value at D_00
 		 */
-		bool is_consistent();
+		bool is_consistent() const;
 
 		/** Adds a new clock.
 		 * 
@@ -635,6 +635,10 @@ namespace tacos::zones {
 		 * @return True if successful, false if clock doesn't exist or something bad happened
 		 */
 		bool remove_clock(std::string clock_name);
+
+		/** Returns true iff the clock exists in the DBM */
+		bool
+		has_clock(std::string clock_name) const;
 
 		/** For testing */
 		std::map<std::string, std::size_t>
@@ -731,7 +735,7 @@ namespace tacos::zones {
 	 * @return A vector of ClockConstraints that constraint valuations to exactly this zone
 	 */
 	std::vector<automata::ClockConstraint> 
-	get_clock_constraints_from_zone(const Zone_slice &zone, RegionIndex max_region_index);
+	get_clock_constraints_from_zone(const Zone_slice &zone, RegionIndex max_constant);
 
 	/** Checks whether a clock constraint is satisfied by a zone.
 	 * A Zone satisfies a clock constraint if all valuations in the zone satisfy the constraint.

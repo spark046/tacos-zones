@@ -4,7 +4,7 @@
 namespace tacos::zones {
 
 	Zone_slice
-	Zone_DBM::get_zone_slice(std::string clock)
+	Zone_DBM::get_zone_slice(std::string clock) const
 	{
 		assert(graph_.has_clock(clock));
 
@@ -14,8 +14,10 @@ namespace tacos::zones {
 
 		Zone_slice ret{0, 0, false, false, max_constant_};
 
-		const DBM_Entry &lower_bound = graph_.get(0, clock);
-		const DBM_Entry &upper_bound = graph_.get(clock, 0);
+		std::size_t index = graph_.get_index_of_clock(clock);
+
+		const DBM_Entry &lower_bound = graph_.get_value(0, index);
+		const DBM_Entry &upper_bound = graph_.get_value(index, 0);
 
 		if(lower_bound.value_ < 0) {
 			ret.lower_bound_ = (Endpoint) -lower_bound.value_;
@@ -59,7 +61,7 @@ namespace tacos::zones {
 	void
 	Zone_DBM::reset(std::string clock)
 	{
-		assert((graph_.get(0,0) == DBM_Entry{0, true}));
+		//assert((graph_.get(0,0) == DBM_Entry{0, true}));
 
 		std::size_t index = graph_.get_index_of_clock(clock);
 
@@ -68,14 +70,14 @@ namespace tacos::zones {
 			graph_.get(i, index) = graph_.get(i, 0) + DBM_Entry{0, true};
 		}
 
-		assert((graph_.get(0, index) == DBM_Entry{0, true}) && (graph_.get(index, 0) == DBM_Entry{0, true}));
-
 		normalize();
 	}
 
 	void
 	Zone_DBM::conjunct(std::string clock, automata::ClockConstraint clock_constraint)
 	{
+		assert(graph_.has_clock(clock));
+
 		std::size_t index = graph_.get_index_of_clock(clock);
 
 		DBM_Entry lower_entry{true, 0, false};
@@ -158,13 +160,13 @@ namespace tacos::zones {
 			}
 		}
 
-		graph_.floyd_warshall();
+		//graph_.floyd_warshall();
 	}
 
 	bool
-	Zone_DBM::is_consistent()
+	Zone_DBM::is_consistent() const
 	{
-		return graph_.get(0, 0) == DBM_Entry{0, true};
+		return graph_.get_value(0, 0) == DBM_Entry{0, true};
 	}
 
 	//TODO This doesn't consider that old clocks may have been removed
@@ -249,6 +251,12 @@ namespace tacos::zones {
 	Zone_DBM::remove_clock(std::string clock_name)
 	{
 		return graph_.remove_clock(clock_name);
+	}
+
+	bool
+	Zone_DBM::has_clock(std::string clock_name) const
+	{
+		return graph_.has_clock(clock_name);
 	}
 
 	DBM_Entry
@@ -368,9 +376,9 @@ namespace tacos::zones {
 		//TODO Fix the problem with removing clock leading to access to removed clocks
 		//For now just make the clock unbounded
 
-		unbound_clock(clock_name);
+		assert(has_clock(clock_name));
 
-		return true;
+		return unbound_clock(clock_name);
 		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Actual implementation~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 		//Check whether clock exists
@@ -404,7 +412,7 @@ namespace tacos::zones {
 			}
 		}
 
-		//Update Indices (Addition is for having a iterator)
+		//Update Indices (Addition is for having an iterator)
 		clock_to_index.erase(clock_to_index.begin() + index_to_delete);
 
 		//Update Matrix
@@ -427,7 +435,7 @@ namespace tacos::zones {
 	}
 
 	bool
-	Graph::has_clock(std::string clock_name)
+	Graph::has_clock(std::string clock_name) const
 	{
 		return std::find(clock_to_index.begin(), clock_to_index.end(), clock_name) != clock_to_index.end();
 	}
@@ -500,16 +508,13 @@ namespace tacos::zones {
 	}
 
 	std::vector<automata::ClockConstraint> 
-	get_clock_constraints_from_zone(const Zone_slice &zone, RegionIndex max_region_index)
+	get_clock_constraints_from_zone(const Zone_slice &zone, RegionIndex max_constant)
 	{
-		Endpoint max_constant;
-		if(max_region_index % 2 == 0) {
-			max_constant = max_region_index / 2;
-		} else {
-			max_constant = (max_region_index + 1) / 2;
+		if(zone.is_empty()) {
+			return {};
 		}
-
-		if(zone.lower_bound_ == zone.upper_bound_) {
+		
+		if(zone.lower_bound_ == zone.upper_bound_ && !zone.lower_isOpen_ && !zone.upper_isOpen_) {
 			return {automata::AtomicClockConstraintT<std::equal_to<Time>>(zone.lower_bound_)};
 		}
 
@@ -521,13 +526,14 @@ namespace tacos::zones {
 			ret.push_back(automata::AtomicClockConstraintT<std::greater_equal<Time>>(zone.lower_bound_));
 		}
 
-		if(zone.upper_bound_ <= max_constant) {
+		if(zone.upper_bound_ < max_constant) {
 			if(zone.upper_isOpen_) {
 				ret.push_back(automata::AtomicClockConstraintT<std::less<Time>>(zone.upper_bound_));
-			} else {
+			} else if(zone.upper_bound_ < max_constant) {
 				ret.push_back(automata::AtomicClockConstraintT<std::less_equal<Time>>(zone.upper_bound_));
 			}
 		}
+
 
 		return ret;
 	}
@@ -661,6 +667,8 @@ namespace tacos::zones {
 	std::ostream &
 	operator<<(std::ostream &os, const tacos::zones::Zone_DBM &dbm)
 	{
+		std::vector<std::string> clocks = dbm.get_clocks();
+
 		for (std::size_t i = 0; i < dbm.size() + 1; i++)
 		{
 			os << "| ";
@@ -668,7 +676,12 @@ namespace tacos::zones {
 			{
 				os << dbm.at(i, j) << " ";
 			}
-			os << "|\n";
+			if(i == 0) {
+				os << "| 0\n";
+			} else {
+				os << "| " << clocks.at(i-1) << "\n";
+			}
+			
 		}
 
 		return os;
