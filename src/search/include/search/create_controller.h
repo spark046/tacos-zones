@@ -47,7 +47,7 @@ get_constraints_from_time_successor(const search::CanonicalABWord<LocationT, Act
 			} else { //TAZoneState
 				const TAZoneState state = std::get<TAZoneState>(symbolic_state);
 				for (const auto &constraint : zones::get_clock_constraints_from_zone(
-				       state.symbolic_valuation, max_region_index)) {
+				       state.symbolic_valuation, max_constant)) {
 					res.insert({{state.clock, constraint}});
 				}
 			}

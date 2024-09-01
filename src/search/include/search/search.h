@@ -501,7 +501,7 @@ public:
 		}
 	}
 
-	//Public for testing purposes
+	private:
 	std::tuple<
 		std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>>,
 		std::map<ActionType, RegionIndex>,
@@ -513,12 +513,7 @@ public:
 		//TODO I think for Golog plants the weird thing for adapters is still necessary, so add a zone adapter or something
 		//TODO Also location constraints aren't added
 
-		//TODO So many for loops to go through the canonical word. For Architecture it's better to keep the functions seperate, but very inefficient
-
 		//Take every symbol transition from TA and ATA in order to intersect the current zone with the transition guards.
-
-		//TODO This assumes the TA is deterministic instead of Non-Deterministic (i.e. for one transition from some Configuration, there is
-		//only exactly one new target Configuration)
 
 		std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>> successors;
 
@@ -562,18 +557,18 @@ public:
 				for(const auto &clock : ta_->get_clocks()) {
 					auto [curr_constraint, last_constraint] = clock_constraints.equal_range(clock);
 					for(; curr_constraint != last_constraint; curr_constraint++) {
-						new_dbm[symbol].conjunct(clock, curr_constraint->second);
+						new_dbm.at(symbol).conjunct(clock, curr_constraint->second);
 					}
 				}
 
 				//1.5 Check for empty zones, if a DBM is inconsistent, ignore this transition
-				if(!new_dbm[symbol].is_consistent()) {
+				if(!new_dbm.at(symbol).is_consistent()) {
 					continue;
 				}
 
 				//2. Reset Zones
 				for (const auto &clock : curr_transition->second.clock_resets_) {
-					new_dbm[symbol].reset(clock);
+					new_dbm.at(symbol).reset(clock);
 				}
 
 				//3. Calculate new Location and insert PlantZoneState to successors
@@ -603,6 +598,7 @@ public:
 
 			for(const auto &start_state : start_states) {
 				//Get a valid transition
+				//TODO implement location constraints
 				if constexpr (!use_location_constraints) {
 					auto t = std::find_if(ata_->get_transitions().cbegin(), ata_->get_transitions().cend(), [&](const auto &t) {
 						return t.source_ == start_state.location && t.symbol_ == logic::AtomicProposition{symbol};
@@ -622,8 +618,21 @@ public:
 
 					for(const auto &configuration : new_configurations) {
 						for(const auto &state : configuration) {
+							//This assumes the new clock doesn't already exist, as we can only keep track of a single valuation for a clock
 							new_dbm.at(symbol).copy_clock(ata_formula_to_string(state.location), start_state.clock);
+
+							if(ata_formula_to_string(state.location) != start_state.clock) {
+								assert(new_dbm.at(symbol).has_clock(start_state.clock));
+								new_dbm.at(symbol).remove_clock(start_state.clock);
+							}
 						}
+					}
+	
+					if(new_configurations.empty() || std::all_of(std::begin(new_configurations), std::end(new_configurations), [](const auto &config) {
+						return config.empty();
+					})) {
+						assert(new_dbm.at(symbol).has_clock(start_state.clock));
+						new_dbm.at(symbol).remove_clock(start_state.clock);
 					}
 
 					models.push_back(new_configurations);
@@ -638,10 +647,14 @@ public:
 				//Check whether we have sink location or not
 				if(ata_->get_sink_location().has_value()) {
 					ata_successors.insert({{ATAZoneState<ConstraintSymbolType>{
-											ata_->get_sink_location().value(), zones::Zone_slice{0, 0, false, false, K_}
+											ata_->get_sink_location().value(), zones::Zone_slice{0, K_, false, false, K_}
 											}}});
+					new_dbm.at(symbol).add_clock(ata_formula_to_string(ata_->get_sink_location().value()));
+					new_dbm.at(symbol).reset(ata_formula_to_string(ata_->get_sink_location().value()));
 				} else {
 					ata_successors.insert({});
+					new_dbm.at(symbol).add_clock("ata_sink_clock");
+					new_dbm.at(symbol).reset("ata_sink_clock");
 				}
 				model_is_empty = true;
 			}
@@ -654,9 +667,14 @@ public:
 						std::set<ATAZoneState<ConstraintSymbolType>> zone_state_model;
 						for(const auto &raw_state : state_model) {
 							zone_state_model.insert(ATAZoneState<ConstraintSymbolType>{raw_state.location, raw_state.zone});
-							std::vector<automata::ClockConstraint> new_constraints = zones::get_clock_constraints_from_zone(raw_state.zone, 2*K_);
-							for(const auto &constraint : new_constraints) {
-								new_dbm.at(symbol).conjunct(ata_formula_to_string(raw_state.location), constraint);
+							if(raw_state.zone.lower_bound_ == 0 && raw_state.zone.upper_bound_ == 0 &&
+							  !raw_state.zone.lower_isOpen_ && !raw_state.zone.upper_isOpen_) {
+								new_dbm.at(symbol).reset(ata_formula_to_string(raw_state.location));
+							} else {
+								std::vector<automata::ClockConstraint> new_constraints = zones::get_clock_constraints_from_zone(raw_state.zone, K_);
+								for(const auto &constraint : new_constraints) {
+									new_dbm.at(symbol).conjunct(ata_formula_to_string(raw_state.location), constraint);
+								}
 							}
 						}
 						ata_successors.insert({zone_state_model});
@@ -671,9 +689,14 @@ public:
 							std::set<ATAZoneState<ConstraintSymbolType>> zone_state_model;
 							for(const auto &raw_state : state_model) {
 								zone_state_model.insert(ATAZoneState<ConstraintSymbolType>{raw_state.location, raw_state.zone});
-								std::vector<automata::ClockConstraint> new_constraints = zones::get_clock_constraints_from_zone(raw_state.zone, 2*K_);
-								for(const auto &constraint : new_constraints) {
-									new_dbm.at(symbol).conjunct(ata_formula_to_string(raw_state.location), constraint);
+								if(raw_state.zone.lower_bound_ == 0 && raw_state.zone.upper_bound_ == 0 &&
+								  !raw_state.zone.lower_isOpen_ && !raw_state.zone.upper_isOpen_) {
+									new_dbm.at(symbol).reset(ata_formula_to_string(raw_state.location));
+								} else {
+									std::vector<automata::ClockConstraint> new_constraints = zones::get_clock_constraints_from_zone(raw_state.zone, K_);
+									for(const auto &constraint : new_constraints) {
+										new_dbm.at(symbol).conjunct(ata_formula_to_string(raw_state.location), constraint);
+									}
 								}
 							}
 							auto expanded_configuration = configuration;
@@ -763,26 +786,10 @@ public:
 						}
 					}
 
-					//Remove all ata clocks that don't appear in this word
-					//auto ata_states = get_ata_symbols_from_canonical_word(new_word);
-					//for(const auto &clock_name : new_dbm.at(symbol).get_clocks()) {
-					//	bool exists_in_word = false;
-					//	for(const auto &ata_state : ata_states) {
-					//		if(clock_name == ata_state.clock) {
-					//			exists_in_word = true;
-					//			break;
-					//		}
-					//	}
-					//
-					//	if(!exists_in_word) {
-					//		new_dbm.at(symbol).remove_clock(clock_name);
-					//	}
-					//}
-
 					//Insert New Word
 					successors.insert( {symbol, new_word});
 
-					needed_increment[symbol] = old_dbm.get_increment(new_dbm[symbol]);
+					needed_increment[symbol] = old_dbm.get_increment(new_dbm.at(symbol));
 				}
 			}
 		}

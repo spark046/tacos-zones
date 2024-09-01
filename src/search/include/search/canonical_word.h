@@ -361,6 +361,31 @@ get_canonical_word_zones(const CanonicalABWord<Location, ConstraintSymbolType> &
 }
 
 /**
+ * Gets a set of ABRegionSymbols that are PlantZoneStates
+ * 
+ * @param word A canonical word using zones
+ * @return A std::set of PlantZoneStates
+ */
+template <typename Location, typename ConstraintSymbolType>
+std::set<PlantZoneState<Location>>
+get_ta_symbols_from_canonical_word(const CanonicalABWord<Location, ConstraintSymbolType> &word)
+{
+	std::set<PlantZoneState<Location>> ret;
+
+	for(const auto &partition : word) {
+		for(const auto &symbol : partition) {
+			if(std::holds_alternative<PlantZoneState<Location>>(symbol)) {
+				auto state = std::get<PlantZoneState<Location>>(symbol);
+
+				ret.insert( state );
+			}
+		}
+	}
+
+	return ret;
+}
+
+/**
  * Gets a set of ABRegionSymbols that are ATAZoneStates
  * 
  * @param word A canonical word using zones
@@ -378,6 +403,37 @@ get_ata_symbols_from_canonical_word(const CanonicalABWord<Location, ConstraintSy
 				auto state = std::get<ATAZoneState<ConstraintSymbolType>>(symbol);
 
 				ret.insert( state );
+			}
+		}
+	}
+
+	return ret;
+}
+
+/** Get all the clocks of this CanonicalABWord (using zones)
+ * 
+ * @param word The CanonicalABWord in question. Must be using zones
+ * @return A vector of all clocks that appear
+ */
+template <typename Location, typename ConstraintSymbolType>
+std::vector<std::string>
+get_zone_clocks(const CanonicalABWord<Location, ConstraintSymbolType> &word)
+{
+	//NOT a regionalized canonical word
+	assert(!is_region_canonical_word(word));
+
+	std::vector<std::string> ret;
+
+	for(const auto &partition : word) {
+		for(const auto &symbol : partition) {
+			if(std::holds_alternative<PlantZoneState<Location>>(symbol)) {
+				const auto &state = std::get<PlantZoneState<Location>>(symbol);
+
+				ret.push_back(state.clock);
+			} else { //ATAZoneState
+				const auto &state = std::get<ATAZoneState<ConstraintSymbolType>>(symbol);
+
+				ret.push_back(state.clock);
 			}
 		}
 	}
