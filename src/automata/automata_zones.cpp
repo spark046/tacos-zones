@@ -259,6 +259,27 @@ namespace tacos::zones {
 		return graph_.has_clock(clock_name);
 	}
 
+	Zone_DBM
+	Zone_DBM::get_subset(std::set<std::string> clocks) const
+	{
+		Graph new_graph{clocks};
+
+		for(const auto &clock : clocks) {
+			new_graph.get(clock, 0) = at(clock, 0);
+			new_graph.get(0, clock) = at(0, clock);
+
+			//Get difference constraints too
+			for(const auto &other_clock : clocks) {
+				new_graph.get(clock, other_clock) = at(clock, other_clock);
+			}
+		}
+
+		new_graph.floyd_warshall();
+
+		Zone_DBM new_dbm{new_graph, max_constant_};
+		return new_dbm;
+	}
+
 	DBM_Entry
 	Zone_DBM::at(std::size_t x, std::size_t y) const
 	{
@@ -288,6 +309,10 @@ namespace tacos::zones {
 	{
 		return graph_.size() - 1;
 	}
+
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// LOCAL FUNCTIONS FROM HERE ON
+	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 	void 
 	Graph::floyd_warshall()

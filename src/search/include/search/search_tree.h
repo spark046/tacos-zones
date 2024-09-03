@@ -60,7 +60,7 @@ template <typename Location, typename ActionType, typename ConstraintSymbolType 
 class SearchTreeNode
 {
 public:
-	/** Construct a node.
+	/** Construct a node using regions.
 	 * @param words The CanonicalABWords of the node (being of the same reg_a class)
 	 */
 	SearchTreeNode(const std::set<CanonicalABWord<Location, ConstraintSymbolType>> &words)
@@ -75,23 +75,16 @@ public:
 		}));
 	}
 
-	/** Construct a node with zones.
-	 * @param words The CanonicalABWords of the node (being of the same reg_a class)
-	 * @param zone The zones of this node encoded as a Difference Bound Matrix
+	/** Construct a node using zones.
+	 * @param words The CanonicalABZoneWords of the node (being of the same reg_a class)
 	 */
-	SearchTreeNode(const std::set<CanonicalABWord<Location, ConstraintSymbolType>> &words, const zones::Zone_DBM &zone)
-	: words(words), dbm_(zone)
+	SearchTreeNode(const std::set<CanonicalABZoneWord<Location, ConstraintSymbolType>> &words)
+	: zone_words(words)
 	{
 		// The constraints must be either over locations or over actions.
 		static_assert(std::is_same_v<Location, ConstraintSymbolType>
 		              || std::is_same_v<ActionType, ConstraintSymbolType>);
-		// All words must have the same reg_a.
-		assert(std::all_of(std::begin(words), std::end(words), [&words](const auto &word) {
-			return words.empty() || reg_a(*std::begin(words)) == reg_a(word);
-		}));
-		//Zone must be consistent
-		//TODO is_consistent can't be const due to weird c++ thingy
-		//assert(zone.is_consistent());
+		//TODO add back assert making sure reg_a part is always the same
 	}
 
 	/** @brief Set the node label and optionally cancel the children.
@@ -272,7 +265,8 @@ public:
 	bool
 	operator==(const SearchTreeNode<Location, ActionType, ConstraintSymbolType> &other) const
 	{
-		return this->words == other.words && this->state == other.state && this->label == other.label
+		//if either words or zone_words isn't used, they should just be empty, so they should still be the same
+		return this->words == other.words && this->zone_words == other.zone_words && this->state == other.state && this->label == other.label
 		  //&& this->parent == other.parent && this->children == other.children
 		  ;
 	}
@@ -307,7 +301,9 @@ public:
 		node->parents.insert(this);
 	}
 
-	/** The words of the node */
+	/** The words of the node using zones*/
+	std::set<CanonicalABZoneWord<Location, ConstraintSymbolType>> zone_words;
+	/** The words of the node using regions */
 	std::set<CanonicalABWord<Location, ConstraintSymbolType>> words;
 	/** The state of the node */
 	std::atomic<NodeState> state = NodeState::UNKNOWN;
@@ -324,8 +320,6 @@ public:
 	LabelReason label_reason = LabelReason::UNKNOWN;
 	/** The current regionalized minimal total time to reach this node */
 	RegionIndex min_total_region_increments = std::numeric_limits<RegionIndex>::max();
-	/** The current zone of this node if it uses zones */
-	zones::Zone_DBM dbm_;
 
 private:
 	/** A list of the children of the node, which are reachable by a single transition */
@@ -356,7 +350,11 @@ print_to_ostream(std::ostream                                                   
                  __attribute__((unused)) bool         print_children = false,
                  __attribute__((unused)) unsigned int indent         = 0)
 {
-	os << node.words << ": " << node.state << " " << node.label;
+	if(node.words.empty()) {
+		os << node.zone_words << ": " << node.state << " " << node.label;
+	} else {
+		os << node.words << ": " << node.state << " " << node.label;
+	}
 }
 
 /** Print a node

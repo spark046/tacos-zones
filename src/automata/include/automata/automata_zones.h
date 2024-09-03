@@ -536,6 +536,9 @@ namespace tacos::zones {
 	class Zone_DBM
 	{
 		public:
+		//Max constant that may appear in any zone
+		Endpoint max_constant_;
+
 		/** Default Constructor creating an empty DBM. Used when zones aren't needed.
 		 * 
 		 * TODO This might end up wasting space when using the region construction, but should be negligablesd
@@ -607,14 +610,14 @@ namespace tacos::zones {
 		/** Normalize this DBM according to max_constant_ */
 		void normalize();
 
-		/** Returns a vector containing all clocks except for the zero clock within this DBM */
-		std::vector<std::string> get_clocks() const;
-
 		/** Check whether this zone is consistent, i.e. it has no empty sets.
 		 * 
 		 * This is accomplished by always marking inconsistent DBMs with a negative value at D_00
 		 */
 		bool is_consistent() const;
+
+		/** Returns a vector containing all clocks except for the zero clock within this DBM */
+		std::vector<std::string> get_clocks() const;
 
 		/** Adds a new clock.
 		 * 
@@ -637,21 +640,17 @@ namespace tacos::zones {
 		bool remove_clock(std::string clock_name);
 
 		/** Returns true iff the clock exists in the DBM */
-		bool
-		has_clock(std::string clock_name) const;
+		bool has_clock(std::string clock_name) const;
 
-		/** For testing */
-		std::map<std::string, std::size_t>
-		get_indexes(std::set<std::string> clocks)
-		{
-			std::map<std::string, std::size_t> ret;
+		/** Calculates the increment needed in order to reach the new DBM.
+		 * 
+		 * @param new_dbm The new DBM that is supposed to be reached
+		 * @return The needed increment as a Region Index
+		 */
+		RegionIndex get_increment(Zone_DBM new_dbm) const;
 
-			for(const auto &clock : clocks) {
-				ret.insert( {clock, graph_.get_index_of_clock(clock)} );
-			}
-
-			return ret;
-		}
+		/** Get the DBM for only these clocks. Always include the zero clock */
+		Zone_DBM get_subset(std::set<std::string> clocks) const;
 
 		/** Gets graph element at x,y
 		 */
@@ -669,17 +668,29 @@ namespace tacos::zones {
 		 */
 		DBM_Entry at(std::string clock1, std::string clock2) const;
 
-		/** Calculates the increment needed in order to reach the new DBM.
-		 * 
-		 * @param new_dbm The new DBM that is supposed to be reached
-		 * @return The needed increment as a Region Index
-		 */
-		RegionIndex get_increment(Zone_DBM new_dbm) const;
 
 		/** Returns the amount of clocks in this DBM (excluding 0) */
 		std::size_t size() const;
 
+		/** For testing */
+		std::map<std::string, std::size_t>
+		get_indexes(std::set<std::string> clocks)
+		{
+			std::map<std::string, std::size_t> ret;
+
+			for(const auto &clock : clocks) {
+				ret.insert( {clock, graph_.get_index_of_clock(clock)} );
+			}
+
+			return ret;
+		}
 		private:
+		/** Private Constructor for constructing directly with a graph */
+		Zone_DBM(Graph graph, Endpoint max_constant) : graph_(graph), max_constant_(max_constant)
+		{
+
+		}
+
 		/** Conjuncts the DBM with this diagonal clock constraint: comparison(x,y)
 		 * 
 		 * e.g. if comparison is (2, <=), then the clock constraint is:
@@ -694,12 +705,30 @@ namespace tacos::zones {
 		 */
 		void and_func(std::size_t x, std::size_t y, DBM_Entry comparison);
 
-		public:
-		//Max constant that may appear in any zone
-		Endpoint max_constant_;
-
-		private:
 		Graph graph_;
+		public:
+
+		/** Check two DBMs for equality.
+		 * @param s1 The first dbm
+		 * @param s2 The second dbm
+		 * @return true if s1 is equal to s2
+		 */
+		friend bool
+		operator==(const Zone_DBM &s1, const Zone_DBM &s2) {
+			if(s1.size() != s2.size()) {
+				return false;
+			}
+
+			for(std::size_t i = 0; i < s1.size(); i++) {
+				for(std::size_t j = 0; j < s1.size(); j++) {
+					if(s1.at(i, j) != s2.at(i,j)) {
+						return false;
+					}
+				}
+			}
+
+			return true;
+		}
 	};
 
 	/**

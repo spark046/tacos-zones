@@ -9,6 +9,7 @@
 #pragma once
 
 #include "automata/ata.h"
+#include "automata/automata_zones.h"
 
 #include <fmt/ostream.h>
 #include "symbolic_state.h"
@@ -34,6 +35,209 @@ using ABRegionSymbol =
 /** A canonical word H(s) for a regionalized A/B configuration */
 template <typename LocationT, typename ConstraintSymbolT>
 using CanonicalABWord = std::vector<std::set<ABRegionSymbol<LocationT, ConstraintSymbolT>>>;
+
+/** A canonical word for an A/B Configuration using zones. Uses DBM technology */
+template <typename LocationT, typename ConstraintSymbolT>
+struct CanonicalABZoneWord {
+	//Each CanonicalABZoneWord only has a single TA state
+	LocationT ta_location;
+	//A single TA state will still have several clocks
+	std::set<std::string> ta_clocks;
+	//ATA Locations converted to strings are also the clock names
+	std::set<logic::MTLFormula<ConstraintSymbolT>> ata_locations;
+
+	Endpoint max_constant;
+
+	//Symbolic Valuations of the states are all stored in this DBM
+	zones::Zone_DBM dbm;
+
+	/** Construct a CanonicalABZoneWord out of real-valued Plant and ATA configurations
+	 * 
+	 * @param plant_configuration The Configuration of the Plant
+	 * @param ata_configuration The configuration of the ATA
+	 * @param K The maximal constant that can appear in this word
+	 * @return A CanonicalABZoneWord where the zones correspond to there the real value is. E.g. if x := 2.5, then the zone is (2,3)
+	 */
+	CanonicalABZoneWord(const PlantConfiguration<LocationT>          &plant_configuration,
+						const ATAConfiguration<ConstraintSymbolType> &ata_configuration,
+						const unsigned int                            K)
+	: max_constant(K)
+	{
+		//TA-Part
+		ta_location = plant_configuration.location;
+		for(const auto &[clock_name, clock] : plant_configuration.clock_valuations) {
+			ta_clocks.insert(clock_name);
+			dbm.add_clock(clock_name);
+
+			Time valuation = clock.get_valuation();
+			//Check whether there isn't a fractional part.
+			if(utilities::getFractionalPart<int, Time>(valuation) == 0) {
+				dbm.conjunct(clock_name, automata::AtomicClockConstraintT<std::equal_to<Time>>(valuation));
+			} else {
+				dbm.conjunct(clock_name, automata::AtomicClockConstraintT<std::greater<Time>>(valuation));
+				dbm.conjunct(clock_name, automata::AtomicClockConstraintT<std::less<Time>>(valuation + 1));
+			}
+			dbm.normalize();
+		}
+
+		//ATA Part
+		for(const auto &state : ata_configuration) {
+			add_ata_location(state.location, false);
+			std::string clock_name = ata_formula_to_string(state.location);
+
+			Time valuation = state.clock_valuation;
+			//Check whether there isn't a fractional part.
+			if(utilities::getFractionalPart<int, Time>(valuation) == 0) {
+				dbm.conjunct(clock_name, automata::AtomicClockConstraintT<std::equal_to<Time>>(valuation));
+			} else {
+				dbm.conjunct(clock_name, automata::AtomicClockConstraintT<std::greater<Time>>(valuation));
+				dbm.conjunct(clock_name, automata::AtomicClockConstraintT<std::less<Time>>(valuation + 1));
+			}
+			dbm.normalize();
+		}
+	}
+
+	CanonicalABZoneWord(LocationT location,
+						std::set<std::string> ta_clocks,
+						std::set<logic::MTLFormula<ConstraintSymbolT>> ata_clocks,
+						Endpoint max_constant,
+						zones::Zone_DBM dbm)
+	: ta_location(location), ta_clocks(ta_clocks), ata_locations(ata_clocks), max_constant(max_constant), dbm(dbm)
+	{
+		//make sure the ta_clocks and ata_clocks are all contained in the dbm
+		assert( std::all_of(ta_clocks.begin(), ta_clocks.end(), [&dbm](const auto &clock) {
+				return std::find(dbm.get_clocks().begin(), dbm.get_clocks().end(), clock) != dbm.get_clocks().end();
+			}) &&
+				std::all_of(ata_locations.begin(), ata_locations.end(), [&dbm](const auto &location) {
+				return std::find(dbm.get_clocks().begin(), dbm.get_clocks().end(), ata_formula_to_string(location)) != dbm.get_clocks().end();
+			})
+		);
+	}
+
+	/**
+	 * Adds a new ata_location to this Canonical Word.
+	 * Also adds a new clock to the DBM automatically, and resets it by default, but it can
+	 * also be left unbounded
+	 * 
+	 * @param new_location The new location
+	 * @param reset_new_clock Whether the new clock should immediately be reset to equal 0. Default is true
+	 * @return True if successful, false if something went wrong, e.g. ATA location already exists
+	 */
+	bool add_ata_location(logic::MTLFormula<ConstraintSymbolT> new_location, bool reset_new_clock = true) {
+		//Check whether successful or not
+		if(ata_locations.insert(new_location).second && dbm.add_clock(ata_formula_to_string(new_location))) {
+			if(reset_new_clock) {
+				dbm.reset(ata_formula_to_string(new_location));
+			}
+
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Implicitly converts a CanonicalABZoneWord into a CanonicalABWord.
+	 * The word is partitioned in such a way, so that each partition has its own unique zone.
+	 * All partitions are sorted according to their zones.
+	 * 
+	 * @return A CanonicalABWord
+	 */
+	operator CanonicalABWord<LocationT, ConstraintSymbolT>() const
+	{
+		CanonicalABWord<LocationT, ConstraintSymbolT> ab_word;
+
+		//~~~~~~~~~~Construct TA Part of CanonicalWord~~~~~~~~~~
+		for(const auto &ta_clock : ta_clocks) {
+			//TODO Find better way to sort CanonicalWords. Fractional Part isn't very good for zones
+			//find correct index to sort it into (TODO For now just compare the zones, so if they are the same, they are in the same partition)
+
+			zones::Zone_slice zone = dbm.get_zone_slice(ta_clock);
+			PlantZoneState<LocationT> ta_state{ta_location, ta_clock, zone};
+
+			std::size_t index = 0;
+			for(; index < ab_word.size(); index++) {
+				if(zone == get_zone_slice(*ab_word[index].begin(), max_constant)) {
+					ab_word[index].insert(ta_state);
+					break;
+				}
+			}
+			//No matching zone was found, create new partition
+			if(index == ab_word.size()) {
+				//Sort the canonical word according to the zones.
+				zones::Zone_slice zone_to_insert = zone;
+				std::size_t jndex = 0; //Terrible name, utterly ashamed of myself
+
+				for(; jndex < ab_word.size(); jndex++) {
+					zones::Zone_slice curr_zone = get_zone_slice(*ab_word[jndex].begin(), max_constant);
+					if(curr_zone < zone_to_insert) {
+						continue;
+					}
+
+					std::set<ABRegionSymbol<LocationT, ConstraintSymbolT>> new_partition{ta_state};
+					ab_word.insert(ab_word.begin() + jndex, new_partition);
+					break;
+				}
+				//End of the word has been reached, so just append it
+				if(jndex == ab_word.size()) {
+					std::set<ABRegionSymbol<LocationT, ConstraintSymbolT>> new_partition{ta_state};
+					ab_word.push_back(new_partition);
+				}
+			}
+		}
+
+		//~~~~~~~~~~Construct ATA Part of CanonicalWord~~~~~~~~~~
+		for(const auto &ata_location : ata_locations) {
+			zones::Zone_slice zone = dbm.get_zone_slice(ata_formula_to_string(ata_location));
+			ATAZoneState<ConstraintSymbolT> ata_state{ata_location, ata_formula_to_string(ata_location), zone};
+
+			std::size_t index = 0;
+			for(; index < ab_word.size(); index++) {
+				if(zone == get_zone_slice(*ab_word[index].begin(), max_constant)) {
+					ab_word[index].insert(ata_state);
+					break;
+				}
+			}
+			//No matching zone was found, create new partition
+			if(index == ab_word.size()) {
+				//TODO Probably define a better way to sort this
+				//Sort the canonical word according to the zones.
+				zones::Zone_slice zone_to_insert = zone;
+				std::size_t jndex = 0;
+
+				for(; jndex < ab_word.size(); jndex++) {
+					zones::Zone_slice curr_zone = get_zone_slice(*ab_word[jndex].begin(), max_constant);
+					if(curr_zone < zone_to_insert) {
+						continue;
+					}
+
+					std::set<ABRegionSymbol<LocationT, ConstraintSymbolT>> new_partition{ata_state};
+					ab_word.insert(ab_word.begin() + jndex, new_partition);
+					break;
+				}
+
+				if(jndex == ab_word.size()) {
+					std::set<ABRegionSymbol<LocationT, ConstraintSymbolT>> new_partition{ata_state};
+					ab_word.push_back(new_partition);
+				}
+			}
+		}
+
+		return ab_word;
+	}
+
+	/** Check two CanonicalABZoneWords for equality.
+	 * They must share the same ta_location, ta_clocks, ata_locations, and the same DBM and max_constant
+	 * @param s1 The first word
+	 * @param s2 The second word
+	 * @return true if s1 is equal to s2
+	 */
+	friend bool
+	operator==(const CanonicalABZoneWord &s1, const CanonicalABZoneWord &s2) {
+		return  s1.ta_location == s2.ta_location && s1.ta_clocks == s2.ta_clocks &&
+				s1.ata_locations == s2.ata_locations && s1.dbm == s2.dbm && s1.max_constant == s2.max_constant;
+	}
+};
 
 /** Get the clock valuation for an ABSymbol, which is either a TA state or an ATA state.
  * @param w The symbol to read the time from

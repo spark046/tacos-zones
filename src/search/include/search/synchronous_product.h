@@ -380,7 +380,7 @@ get_time_successors(
 	std::vector<std::set<CanonicalABWord<Location, ConstraintSymbolType>>> successors;
 	successors.push_back(canonical_words);
 
-	if(is_region_canonical_word(*canonical_words.begin())) {
+	if(!is_region_canonical_word(*canonical_words.begin())) {
 		successors.push_back(get_next_time_successors(canonical_words, K));
 		return successors;
 	}

@@ -267,12 +267,10 @@ public:
 			clock_constraints.insert({"l0", automata::AtomicClockConstraintT<std::equal_to<Time>>(0)});
 
 			tree_root_ = std::make_shared<Node>(
-			  std::set<CanonicalABWord<typename Plant::Location, ConstraintSymbolType>>{
-			    get_canonical_word(ta->get_initial_configuration(),
-			                       ata->get_initial_configuration(),
-			                       K,
-								   true,
-								   clock_constraints)});
+			  std::set<CanonicalABZoneWord<typename Plant::Location, ConstraintSymbolType>>{
+			    CanonicalABZoneWord(ta->get_initial_configuration(),
+			                        ata->get_initial_configuration(),
+			                        K)});
 
 			tree_root_->dbm_ = zones::Zone_DBM{clock_constraints, K};
 		} else {
@@ -502,299 +500,190 @@ public:
 	}
 
 	private:
-	std::tuple<
-		std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>>,
-		std::map<ActionType, RegionIndex>,
-		std::map<ActionType, zones::Zone_DBM>
-	>
-	compute_next_canonical_words(const CanonicalABWord<Location, ConstraintSymbolType> &time_successor, zones::Zone_DBM old_dbm, bool delay)
+	std::map<std::pair<ActionType, RegionIndex>, std::set<CanonicalABZoneWord<Location, ConstraintSymbolType>>>
+	compute_next_canonical_words(const CanonicalABZoneWord<Location, ConstraintSymbolType> &word)
 	{
 		using ATAConfiguration = automata::ata::ZoneConfiguration<logic::MTLFormula<ConstraintSymbolType>>;
+		using CanonicalABZoneWord = CanonicalABZoneWord<Location, ConstraintSymbolType>;
 		//TODO I think for Golog plants the weird thing for adapters is still necessary, so add a zone adapter or something
 		//TODO Also location constraints aren't added
 
+		//Make sure the zones are consistent, and also the TA's clocks should be the same as the word's clocks
+		assert(word.dbm.is_consistent() && ta_.get_clocks() == word.ta_clocks);
+
 		//Take every symbol transition from TA and ATA in order to intersect the current zone with the transition guards.
 
-		std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>> successors;
+		//Successors of this canonical word, together with the needed action and time increment in order to reach it
+		std::map<std::pair<ActionType, RegionIndex>, std::set<CanonicalABZoneWord>> successors;
 
-		//How many steps are needed to take a specific action
-		std::map<ActionType, RegionIndex> needed_increment;
+		//Compute all successors once without delay, and then once with delays
+		for(bool delay : {false, true}) {
+			for(const auto &symbol : ta_->get_alphabet()) {
+				Location location = word.ta_location;
 
-		//The new DBMs for each Action
-		std::map<ActionType, zones::Zone_DBM> new_dbm;
+				//new DBM for the TA part
+				zones::Zone_DBM ta_dbm = word.dbm.get_subset(word.ta_clocks);
+				//CanonicalABZoneWord containing only the TA part
+				CanonicalABZoneWord ta_word;
 
-		for(const auto &symbol : ta_->get_alphabet()) {
-
-			Location location = get_canonical_word_ta_location(time_successor);
-
-			[[maybe_unused]] bool sanity_check =
-			new_dbm.insert( {symbol, old_dbm} ).second;
-
-			assert(sanity_check);
-
-			if(delay) {
-				new_dbm.at(symbol).delay();
-			}
-
-			//Set of configurations, i.e. set of sets of states
-			std::set<std::set<PlantZoneState<Location>>> ta_successors;
-
-			//A set of configurations, i.e. a set of sets of states
-			std::set<std::set<ATAZoneState<ConstraintSymbolType>>> ata_successors;
-
-			//TA-Transition
-			auto [curr_transition, last_transition] = ta_->get_transitions().equal_range(location);
-			for(; curr_transition != last_transition; curr_transition++) {
-				std::set<PlantZoneState<Location>> ta_configuration;
-
-				//0. Check whether this transition is for the current symbol
-				if(curr_transition->second.symbol_ != symbol) {
-					continue;
-				}
-
-				//1. Intersect the zone of transition guard and current zone
-				auto clock_constraints = curr_transition->second.get_guards();
-				for(const auto &clock : ta_->get_clocks()) {
-					auto [curr_constraint, last_constraint] = clock_constraints.equal_range(clock);
-					for(; curr_constraint != last_constraint; curr_constraint++) {
-						new_dbm.at(symbol).conjunct(clock, curr_constraint->second);
-					}
-				}
-
-				//1.5 Check for empty zones, if a DBM is inconsistent, ignore this transition
-				if(!new_dbm.at(symbol).is_consistent()) {
-					continue;
-				}
-
-				//2. Reset Zones
-				for (const auto &clock : curr_transition->second.clock_resets_) {
-					new_dbm.at(symbol).reset(clock);
-				}
-
-				//3. Calculate new Location and insert PlantZoneState to successors
-				for(const auto &clock : ta_->get_clocks()) {
-					ta_configuration.insert(PlantZoneState<Location>{curr_transition->second.target_, clock,
-																	 new_dbm.at(symbol).get_zone_slice(clock)
-																	});
-				}
-
-				new_dbm.at(symbol).normalize();
-
-				ta_successors.insert((ta_configuration));
-			}
-
-			//ATA Transitions
-
-			//Starting Configuration
-			std::set<ATAZoneState<ConstraintSymbolType>> start_states = get_ata_symbols_from_canonical_word(time_successor);
-			
-			// A vector of a set of target configurations that are reached when following a transition.
-			// One entry for each start state
-			std::vector<std::set<ATAConfiguration>> models;
-
-			if (start_states.empty()) {
-				models = {{{}}};
-			}
-
-			for(const auto &start_state : start_states) {
-				//Get a valid transition
-				//TODO implement location constraints
-				if constexpr (!use_location_constraints) {
-					auto t = std::find_if(ata_->get_transitions().cbegin(), ata_->get_transitions().cend(), [&](const auto &t) {
-						return t.source_ == start_state.location && t.symbol_ == logic::AtomicProposition{symbol};
-					});
-					if (t == ata_->get_transitions().end()) {
+				//TA-Transition
+				auto [curr_transition, last_transition] = ta_->get_transitions().equal_range(location);
+				for(; curr_transition != last_transition; curr_transition++) {
+					//0. Check whether this transition is for the current symbol
+					if(curr_transition->second.symbol_ != symbol) {
 						continue;
 					}
 
-					//1. Intersect Zone for the minimal model
-					auto clock_constraints = t->get_clock_constraints();
-					for(const auto &constraint : clock_constraints) {
-						new_dbm.at(symbol).conjunct(start_state.clock, constraint);
+					std::set<PlantZoneState<Location>> ta_configuration;
+
+					//1. Intersect the constraints of transition with the zone
+					auto clock_constraints = curr_transition->second.get_guards();
+					ta_dbm.conjunct(clock_constraints);
+
+					//1.5 if a DBM became inconsistent, ignore this transition
+					if(!ta_dbm.is_consistent()) {
+						continue;
 					}
 
-					//Minimal Models for this state and transition
-					std::set<ATAConfiguration> new_configurations = t->get_minimal_models(new_dbm.at(symbol).get_zone_slice(start_state.clock));
-
-					for(const auto &configuration : new_configurations) {
-						for(const auto &state : configuration) {
-							//This assumes the new clock doesn't already exist, as we can only keep track of a single valuation for a clock
-							new_dbm.at(symbol).copy_clock(ata_formula_to_string(state.location), start_state.clock);
-
-							if(ata_formula_to_string(state.location) != start_state.clock) {
-								assert(new_dbm.at(symbol).has_clock(start_state.clock));
-								new_dbm.at(symbol).remove_clock(start_state.clock);
-							}
-						}
-					}
-	
-					if(new_configurations.empty() || std::all_of(std::begin(new_configurations), std::end(new_configurations), [](const auto &config) {
-						return config.empty();
-					})) {
-						assert(new_dbm.at(symbol).has_clock(start_state.clock));
-						new_dbm.at(symbol).remove_clock(start_state.clock);
+					//2. Reset Zones
+					for (const auto &clock : curr_transition->second.clock_resets_) {
+						ta_dbm.reset(clock);
 					}
 
-					models.push_back(new_configurations);
+					ta_dbm.normalize();
+
+					//3. Calculate new Location and set the TA successor
+					ta_word = CanonicalABZoneWord(curr_transition->second.target, word.ta_clocks, {}, word.max_constant, ta_dbm);
 				}
-			}
 
-			//The model is empty, i.e. no meaningful transition could be made
-			bool model_is_empty = false;
-			if(models.empty() || std::any_of(std::begin(models), std::end(models), [](const auto &model) {
-				return model.empty();
-			})) {
-				//Check whether we have sink location or not
-				if(ata_->get_sink_location().has_value()) {
-					ata_successors.insert({{ATAZoneState<ConstraintSymbolType>{
-											ata_->get_sink_location().value(), zones::Zone_slice{0, K_, false, false, K_}
-											}}});
-					new_dbm.at(symbol).add_clock(ata_formula_to_string(ata_->get_sink_location().value()));
-					new_dbm.at(symbol).reset(ata_formula_to_string(ata_->get_sink_location().value()));
-				} else {
-					ata_successors.insert({});
-					new_dbm.at(symbol).add_clock("ata_sink_clock");
-					new_dbm.at(symbol).reset("ata_sink_clock");
+				//ATA Transitions
+				//Set of new words, where the ATA would be different
+				std::set<CanonicalABZoneWord> new_words;
+
+				//Starting Configuration
+				std::set<logic::MTLFormula<ConstraintSymbolType>> start_locations = word.ata_locations;
+				
+				// A vector of a set of target configurations that are reached when following a transition.
+				// One entry for each start state
+				std::vector<std::set<ATAConfiguration>> models;
+
+				if (start_locations.empty()) {
+					models = {{{}}};
 				}
-				model_is_empty = true;
-			}
 
-			if(!model_is_empty) {
-				//Following Logic from ata.hpp
-				//Basically split up all minimal models from first state so each entry in each state is its minimal model.
-				ranges::for_each(models[0],
-					[&](const auto &state_model) { 
-						std::set<ATAZoneState<ConstraintSymbolType>> zone_state_model;
-						for(const auto &raw_state : state_model) {
-							zone_state_model.insert(ATAZoneState<ConstraintSymbolType>{raw_state.location, raw_state.zone});
-							if(raw_state.zone.lower_bound_ == 0 && raw_state.zone.upper_bound_ == 0 &&
-							  !raw_state.zone.lower_isOpen_ && !raw_state.zone.upper_isOpen_) {
-								new_dbm.at(symbol).reset(ata_formula_to_string(raw_state.location));
-							} else {
-								std::vector<automata::ClockConstraint> new_constraints = zones::get_clock_constraints_from_zone(raw_state.zone, K_);
-								for(const auto &constraint : new_constraints) {
-									new_dbm.at(symbol).conjunct(ata_formula_to_string(raw_state.location), constraint);
-								}
-							}
+				//New DBM used only to interserct the zone to get minimal models
+				zones::Zone_DBM new_dbm = word.dbm;
+
+				for(const auto &start_location : start_locations) {
+					//Get a valid transition
+					//TODO implement location constraints
+					if constexpr (!use_location_constraints) {
+						auto t = std::find_if(ata_->get_transitions().cbegin(), ata_->get_transitions().cend(), [&](const auto &t) {
+							return t.source_ == start_location && t.symbol_ == logic::AtomicProposition{symbol};
+						});
+						if (t == ata_->get_transitions().end()) {
+							continue;
 						}
-						ata_successors.insert({zone_state_model});
-					});
 
-				// Add models from the other configurations
-				std::for_each(std::next(models.begin()), models.end(), [&](const auto &state_models) {
-					std::set<std::set<ATAZoneState<ConstraintSymbolType>>> expanded_configurations;
-					ranges::for_each(state_models, [&](const auto &state_model) {
-						ranges::for_each(ata_successors, [&](const auto &configuration) {
-							//Convert ZoneState to ATAZoneState
-							std::set<ATAZoneState<ConstraintSymbolType>> zone_state_model;
+						//1. Intersect Zone for the minimal model
+						auto clock_constraints = t->get_clock_constraints();
+						for(const auto &constraint : clock_constraints) {
+							new_dbm.conjunct(start_state.clock, constraint);
+						}
+
+						//Minimal Models for this state and transition
+						std::set<ATAConfiguration> new_configurations = t->get_minimal_models(new_dbm.get_zone_slice(ata_formula_to_string(start_location)));
+
+						models.push_back(new_configurations);
+					}
+				}
+
+				//The model is empty, i.e. no meaningful transition could be made
+				bool model_is_empty = false;
+				if(models.empty() || std::any_of(std::begin(models), std::end(models), [](const auto &model) {
+					return model.empty();
+				})) {
+					//copy ta_word
+					CanonicalABZoneWord ata_word = ta_word;
+
+					//Check whether we have sink location or not
+					if(ata_->get_sink_location().has_value()) {
+						//Insert sink as ATA location
+						ata_word.add_ata_location(ata_->get_sink_location.value());
+						new_words.insert(ata_word);
+					} else {
+						//ATA part is empty
+						new_words.insert(ata_word);
+					}
+					model_is_empty = true;
+				}
+
+				if(!model_is_empty) {
+					//Following Logic from ata.hpp
+					//Basically split up all minimal models from first state so each entry in each state is its minimal model.
+
+					ranges::for_each(models[0],
+						[&](const auto &state_model) {
+							CanonicalABZoneWord ata_word = ta_word;
 							for(const auto &raw_state : state_model) {
-								zone_state_model.insert(ATAZoneState<ConstraintSymbolType>{raw_state.location, raw_state.zone});
+								//Check whether zone was reset
 								if(raw_state.zone.lower_bound_ == 0 && raw_state.zone.upper_bound_ == 0 &&
-								  !raw_state.zone.lower_isOpen_ && !raw_state.zone.upper_isOpen_) {
-									new_dbm.at(symbol).reset(ata_formula_to_string(raw_state.location));
+								  !raw_state.zone.lower_isOpen_ && !raw_state.zone.upper_isOpen_)
+								{
+									ata_word.add_ata_location(raw_state.location, true);
 								} else {
+									ata_word.add_ata_location(raw_state.location, false);
 									std::vector<automata::ClockConstraint> new_constraints = zones::get_clock_constraints_from_zone(raw_state.zone, K_);
 									for(const auto &constraint : new_constraints) {
-										new_dbm.at(symbol).conjunct(ata_formula_to_string(raw_state.location), constraint);
+										ata_word.dbm.conjunct(ata_formula_to_string(raw_state.location), constraint);
 									}
 								}
 							}
-							auto expanded_configuration = configuration;
-							expanded_configuration.insert(zone_state_model.begin(), zone_state_model.end());
-							expanded_configurations.insert(expanded_configuration);
+							new_words.insert(ata_word);
 						});
+
+					// Add models from the other configurations
+					std::for_each(std::next(models.begin()), models.end(), [&](const auto &state_models) {
+						std::set<CanonicalABZoneWord> expanded_words;
+						ranges::for_each(state_models, [&](const auto &state_model) {
+							ranges::for_each(new_words, [&](const auto &ata_word) {
+								auto expanded_word = ata_word;
+								for(const auto &raw_state : state_model) {
+									//Check whether zone was reset
+									if(raw_state.zone.lower_bound_ == 0 && raw_state.zone.upper_bound_ == 0 &&
+									!raw_state.zone.lower_isOpen_ && !raw_state.zone.upper_isOpen_)
+									{
+										expanded_word.add_ata_location(raw_state.location, true);
+									} else {
+										expanded_word.add_ata_location(raw_state.location, false);
+										std::vector<automata::ClockConstraint> new_constraints = zones::get_clock_constraints_from_zone(raw_state.zone, K_);
+										for(const auto &constraint : new_constraints) {
+											expanded_word.dbm.conjunct(ata_formula_to_string(raw_state.location), constraint);
+										}
+									}
+								}
+								expanded_words.insert(expanded_word);
+							});
+						});
+						new_words = expanded_words;
 					});
-					ata_successors = expanded_configurations;
-				});
-				assert(!ata_successors.empty());
-			}
+					assert(!new_words.empty());
+				}
 
-			//Construct the new CanonicalABWord for each symbol taken
-			for(const auto &ta_successor : ta_successors) {
-				for(const auto &ata_successor : ata_successors) {
-					CanonicalABWord<Location, ConstraintSymbolType> new_word;
-
-					//~~~~~~~~~~Construct TA Part of CanonicalWord~~~~~~~~~~
-					for(const auto &ta_state : ta_successor) {
-						//TODO Find better way to sort CanonicalWords. Fractional Part isn't very good for zones
-						//find correct index to sort it into (TODO For now just compare the zones, so if they are the same, they are in the same partition)
-						std::size_t index = 0;
-						for(; index < new_word.size(); index++) {
-							if(ta_state.symbolic_valuation == get_zone_slice(*new_word[index].begin(), 2*K_)) {
-								new_word[index].insert(ta_state);
-								break;
-							}
-						}
-						//No matching zone was found, create new partition
-						if(index == new_word.size()) {
-							//TODO Probably define a better way to sort this
-							//Sort the canonical word according to the zones.
-							zones::Zone_slice zone_to_insert = ta_state.symbolic_valuation;
-							std::size_t jndex = 0;
-
-							for(; jndex < new_word.size(); jndex++) {
-								zones::Zone_slice curr_zone = get_zone_slice(*new_word[jndex].begin(), 2*K_);
-								if(curr_zone < zone_to_insert) {
-									continue;
-								}
-
-								std::set<ABRegionSymbol<Location, ConstraintSymbolType>> new_partition{ta_state};
-								new_word.insert(new_word.begin() + jndex, new_partition);
-								break;
-							}
-							//End of the word has been reached, so just append it
-							if(jndex == new_word.size()) {
-								std::set<ABRegionSymbol<Location, ConstraintSymbolType>> new_partition{ta_state};
-								new_word.push_back(new_partition);
-							}
-						}
+				//Insert new CanonicalABZoneWords to successors
+				
+				for(const auto &new_word : new_words) {
+					//Calculate increment
+					RegionIndex increment = 0;
+					if(delay) {
+						increment = word.dbm.get_increment(new_word.dbm);
 					}
-
-					//~~~~~~~~~~Construct ATA Part of CanonicalWord~~~~~~~~~~
-					for(const auto &ata_state : ata_successor) {
-						//TODO Find better way to sort CanonicalWords. Fractional Part isn't very good for zones
-						//find correct index to sort it into (TODO For now just compare the zones, so if they are the same, they are in the same partition)
-						std::size_t index = 0;
-						for(; index < new_word.size(); index++) {
-							if(ata_state.symbolic_valuation == get_zone_slice(*new_word[index].begin(), 2*K_)) {
-								new_word[index].insert(ata_state);
-								break;
-							}
-						}
-						//No matching zone was found, create new partition
-						if(index == new_word.size()) {
-							//TODO Probably define a better way to sort this
-							//Sort the canonical word according to the zones.
-							zones::Zone_slice zone_to_insert = ata_state.symbolic_valuation;
-							std::size_t jndex = 0;
-
-							for(; jndex < new_word.size(); jndex++) {
-								zones::Zone_slice curr_zone = get_zone_slice(*new_word[jndex].begin(), 2*K_);
-								if(curr_zone < zone_to_insert) {
-									continue;
-								}
-
-								std::set<ABRegionSymbol<Location, ConstraintSymbolType>> new_partition{ata_state};
-								new_word.insert(new_word.begin() + jndex, new_partition);
-								break;
-							}
-
-							if(jndex == new_word.size()) {
-								std::set<ABRegionSymbol<Location, ConstraintSymbolType>> new_partition{ata_state};
-								new_word.push_back(new_partition);
-							}
-						}
-					}
-
-					//Insert New Word
-					successors.insert( {symbol, new_word});
-
-					needed_increment[symbol] = old_dbm.get_increment(new_dbm.at(symbol));
+					successors[std::make_pair(increment, symbol)].insert( new_word );
 				}
 			}
 		}
 
-		return std::make_tuple(successors, needed_increment, new_dbm);
+		return successors;
 	}
 
 	std::pair<std::set<Node *>, std::set<Node *>>
@@ -808,44 +697,34 @@ public:
 				 std::set<CanonicalABWord<Location, ConstraintSymbolType>>>
 			child_classes;
 
-		std::map<std::pair<RegionIndex, ActionType>,
-				 zones::Zone_DBM>
-			child_dbms;
-
+		if(is_region_canonical_word(time_successor)) {
 		const auto time_successors = get_time_successors(node->words, K_);
-		for (std::size_t increment = 0; increment < time_successors.size(); ++increment) {
-			for (const auto &time_successor : time_successors[increment]) {
-				std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>> successors;
-				std::map<ActionType, RegionIndex> needed_increments;
-				std::map<ActionType, zones::Zone_DBM> new_dbm;
+			for (std::size_t increment = 0; increment < time_successors.size(); ++increment) {
+				for (const auto &time_successor : time_successors[increment]) {
+					std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>> successors =
+					get_next_canonical_words<Plant,
+											ActionType,
+											ConstraintSymbolType,
+											use_location_constraints,
+											use_set_semantics>(controller_actions_, environment_actions_)(
+									*ta_, *ata_, get_candidate(time_successor), increment, K_, use_zones_);
 
-				if(is_region_canonical_word(time_successor)) {
-					successors =
-					  get_next_canonical_words<Plant,
-					                           ActionType,
-					                           ConstraintSymbolType,
-					                           use_location_constraints,
-					                           use_set_semantics>(controller_actions_, environment_actions_)(
-					    *ta_, *ata_, get_candidate(time_successor), increment, K_, use_zones_);
-				} else { //zones
-					std::tie(successors, needed_increments, new_dbm) = compute_next_canonical_words(time_successor, node->dbm_, increment > 0);
-				}
-
-				for (const auto &[symbol, successor] : successors) {
-					assert(
-					  std::find(std::begin(controller_actions_), std::end(controller_actions_), symbol)
-					    != std::end(controller_actions_)
-					  || std::find(std::begin(environment_actions_), std::end(environment_actions_), symbol)
-					       != std::end(environment_actions_));
-
-					//Offset gets multiplied, since if delay is 0, then we don't care about increments at all
-					RegionIndex offset = 1;
-					if(needed_increments.count(symbol)) {
-						offset = needed_increments[symbol] + 1; //Plus 1 since we don't want multiplication by 0
+					for (const auto &[symbol, successor] : successors) {
+						assert(
+						std::find(std::begin(controller_actions_), std::end(controller_actions_), symbol)
+							!= std::end(controller_actions_)
+						|| std::find(std::begin(environment_actions_), std::end(environment_actions_), symbol)
+							!= std::end(environment_actions_));
+						child_classes[std::make_pair(increment, symbol)].insert(successor);
 					}
-					child_classes[std::make_pair(increment * offset, symbol)].insert(successor);
-					child_dbms[std::make_pair(increment * offset, symbol)] = new_dbm[symbol];
 				}
+			}
+		} else { //Zones
+			for(const auto &word : node->words) {
+				std::map<std::pair<RegionIndex, ActionType>,
+						 std::set<CanonicalABWord<Location, ConstraintSymbolType>>>
+					successors = compute_next_canonical_words(word);
+				child_classes.insert(successors.begin(), successors.end());
 			}
 		}
 
@@ -856,8 +735,7 @@ public:
 		{
 			std::lock_guard lock{nodes_mutex_};
 			for (const auto &[timed_action, words] : child_classes) {
-				auto dbm = child_dbms[timed_action];
-				auto [child_it, is_new] = nodes_.insert({words, std::make_shared<Node>(words, dbm)});
+				auto [child_it, is_new] = nodes_.insert({words, std::make_shared<Node>(words)});
 				const std::shared_ptr<Node> &child_ptr = child_it->second;
 				node->add_child(timed_action, child_ptr);
 				SPDLOG_TRACE("Action ({}, {}): Adding child {}",
@@ -890,7 +768,7 @@ private:
 
 	mutable std::mutex    nodes_mutex_;
 	std::shared_ptr<Node> tree_root_;
-	std::map<std::set<CanonicalABWord<Location, ConstraintSymbolType>>, std::shared_ptr<Node>> nodes_;
+	std::map<std::set<CanonicalABZoneWord<Location, ConstraintSymbolType>>, std::shared_ptr<Node>> nodes_;
 	utilities::ThreadPool<long> pool_{utilities::ThreadPool<long>::StartOnInit::NO};
 	std::unique_ptr<Heuristic<long, SearchTreeNode<Location, ActionType, ConstraintSymbolType>>>
 	  heuristic;
