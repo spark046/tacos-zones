@@ -176,13 +176,34 @@ namespace tacos::zones {
 		//Find the largest difference in magnitude, unless it is of a clock that has been reset.
 		RegionIndex largest_difference = 0;
 
-		for(std::size_t i = 0; i < graph_.size(); i++) {
-			for(std::size_t j = 0; j < graph_.size(); j++) {
-				RegionIndex difference = new_dbm.graph_.get(i, j) - graph_.get_value(i, j);
-				if(difference != 0 && new_dbm.graph_.get_value(i, j) != DBM_Entry{0, true}) {
-					if(difference > largest_difference) {
-						largest_difference = difference;
-					}
+		for(const auto &clock : new_dbm.get_clocks()) {
+			if(!has_clock(clock)) {
+				continue;
+			}
+			std::size_t index = get_index_of_clock(clock);
+
+			//I am stupid and don't know how to incorporate zero clock into for loop
+			{
+				RegionIndex lower_difference = new_dbm.graph_.get(clock, 0) - graph_.get_value(index, 0);
+				RegionIndex upper_difference = new_dbm.graph_.get(0, clock) - graph_.get_value(0, index);
+				RegionIndex difference = std::max(lower_difference, upper_difference);
+				if(difference > largest_difference) {
+					largest_difference = difference;
+				}
+			}
+
+			for(const auto &other_clock : new_dbm.get_clocks()) {
+				if(!has_clock(other_clock)) {
+					continue;
+				}
+
+				std::size_t other_index = get_index_of_clock(other_clock);
+
+				RegionIndex lower_difference = new_dbm.graph_.get(clock, other_clock) - graph_.get_value(index, other_index);
+				RegionIndex upper_difference = new_dbm.graph_.get(other_clock, clock) - graph_.get_value(other_index, index);
+				RegionIndex difference = std::max(lower_difference, upper_difference);
+				if(difference > largest_difference) {
+					largest_difference = difference;
 				}
 			}
 		}
@@ -205,6 +226,12 @@ namespace tacos::zones {
 			//Make canonical by getting shortest paths
 			graph_.floyd_warshall();
 		}
+	}
+
+	std::size_t
+	Zone_DBM::get_index_of_clock(std::string clock) const
+	{
+		return graph_.get_index_of_clock(clock);
 	}
 
 	std::vector<std::string>
@@ -349,9 +376,7 @@ namespace tacos::zones {
 	Graph::add_clock(std::string clock_name)
 	{
 		//Check whether clock already exists
-		if(has_clock(clock_name)) {
-			return false;
-		}
+		assert(!has_clock(clock_name));
 
 		std::size_t old_size = size();
 		Matrix new_matrix = Matrix(old_size + 1);
@@ -398,18 +423,8 @@ namespace tacos::zones {
 	bool
 	Graph::remove_clock(std::string clock_name)
 	{
-		//TODO Fix the problem with removing clock leading to access to removed clocks
-		//For now just make the clock unbounded
-
-		assert(has_clock(clock_name));
-
-		return unbound_clock(clock_name);
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Actual implementation~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 		//Check whether clock exists
-		if(!has_clock(clock_name)) {
-			return false;
-		}
+		assert(has_clock(clock_name));
 
 		std::size_t index_to_delete = get_index_of_clock(clock_name);
 

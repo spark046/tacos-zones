@@ -536,12 +536,7 @@ namespace tacos::zones {
 	class Zone_DBM
 	{
 		public:
-		//Max constant that may appear in any zone
-		Endpoint max_constant_;
-
 		/** Default Constructor creating an empty DBM. Used when zones aren't needed.
-		 * 
-		 * TODO This might end up wasting space when using the region construction, but should be negligablesd
 		 */
 		Zone_DBM()
 		{
@@ -705,8 +700,39 @@ namespace tacos::zones {
 		 */
 		void and_func(std::size_t x, std::size_t y, DBM_Entry comparison);
 
+		/** Get the index of a clock */
+		std::size_t get_index_of_clock(std::string clock) const;
+
 		Graph graph_;
 		public:
+		//Max constant that may appear in any zone
+		Endpoint max_constant_;
+
+		/** Compare two DBMs.
+		 * Not really a lot of theoretical meaning. Just for sets to be happy
+		 * 
+		 * @param s1 The first dbm
+		 * @param s2 The second dbm
+		 * @return true if s1 is smaller than s2
+		 */
+		friend bool
+		operator<(const Zone_DBM &s1, const Zone_DBM &s2) {
+			if(s1.size() < s2.size()) {
+				return true;
+			} else if(s1.size() > s2.size()) {
+				return false;
+			}
+
+			for(std::size_t i = 0; i < s1.size(); i++) {
+				for(std::size_t j = 0; j < s1.size(); j++) {
+					if(s2.at(i, j) < s1.at(i,j)) {
+						return false;
+					}
+				}
+			}
+
+			return true;
+		}
 
 		/** Check two DBMs for equality.
 		 * @param s1 The first dbm

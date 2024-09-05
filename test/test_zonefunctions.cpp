@@ -2,30 +2,19 @@
 #include "automata/automata_zones.h"
 #include "automata/ta.h"
 #include "automata/ta_product.h"
-#include "automata/ta_regions.h"
 #include "utilities/types.h"
-#include "automata/ta_regions.h"
 
 #include "search/search.h"
 #include "search/verify_ta_controller.h"
 
 
 //TODO: Figure out what is actually necessary, currently just copied from test_railroad.cpp
-#include "automata/automata.h"
-#include "automata/ta.h"
-#include "automata/ta_product.h"
-#include "automata/ta_regions.h"
 #include "heuristics_generator.h"
 #include "mtl/MTLFormula.h"
 #include "mtl_ata_translation/translator.h"
 #include "railroad.h"
 #include "search/canonical_word.h"
 #include "search/create_controller.h"
-#include "search/heuristics.h"
-#include "search/search.h"
-#include "search/search_tree.h"
-#include "search/synchronous_product.h"
-#include "search/ta_adapter.h"
 #include "visualization/ta_to_graphviz.h"
 #include "visualization/tree_to_graphviz.h"
 #include "visualization/interactive_tree_to_graphviz.h"
@@ -200,6 +189,10 @@ TEST_CASE("Getting Clock Constraints from ATA", "[zones]")
 
 TEST_CASE("Canonical Word using zones", "[zones]")
 {
+	using CanonicalABZoneWord = search::CanonicalABZoneWord<automata::ta::Location<std::string>, std::string>;
+
+	[[maybe_unused]] automata::ClockConstraint c_eq0 = automata::AtomicClockConstraintT<std::equal_to<Time>>(0);
+
 	TimedAutomaton ta{{Location{"s0"}, Location{"s1"}, Location{"s2"}},
 		  {"a", "b", "c"},
 		  Location{"s0"},
@@ -223,66 +216,70 @@ TEST_CASE("Canonical Word using zones", "[zones]")
 	logic::MTLFormula f   = a.until(b);
 	auto              ata = mtl_ata_translation::translate(f);
 
-	std::multimap<std::string, automata::ClockConstraint> clock_constraints = {
-																				{"x", automata::AtomicClockConstraintT<std::greater<Time>>(1)},
-																				{"x", automata::AtomicClockConstraintT<std::less<Time>>(1)}
-																			  };
+	CanonicalABZoneWord initial_word{ta.get_initial_configuration(), ata.get_initial_configuration(), 2};
 
-	auto initial_word = search::get_canonical_word(Configuration{Location{"s0"}, {{"x", 0}}},
-										   ata.get_initial_configuration(),
-										   2,
-										   true,
-										   clock_constraints);
+	zones::Zone_DBM should_be_dbm{std::set<std::string>{}, 2};
+	should_be_dbm.add_clock("x");
+	should_be_dbm.conjunct("x", c_eq0);
+	should_be_dbm.normalize();
+	should_be_dbm.add_clock("l0");
+	should_be_dbm.conjunct("l0", c_eq0);
+	should_be_dbm.normalize();
 
+	CHECK(initial_word.dbm.has_clock("x"));
+	CHECK(initial_word.dbm == should_be_dbm);
 
-	zones::Zone_slice zone_everything = zones::Zone_slice{0, 2, false, false, 2};
-	zones::Zone_slice zone_less1 = zones::Zone_slice{0, 1, false, true, 2};
-	//zones::Zone_slice zone_greater1 = zones::Zone_slice{1, 2, true, false, 2};
+	CHECK(initial_word.is_valid());
 
-	CHECK(!search::is_region_canonical_word(initial_word));
+	automata::ta::Location<std::string> ta_location = automata::ta::Location<std::string>{"s0"};
+	std::set<std::string> ta_clocks{"x"};
+	std::set<logic::MTLFormula<std::string>> ata_locations{logic::MTLFormula<std::string>{AP{"l0"}}};
 
-	CHECK(initial_word
-			  == CanonicalABWord({{PlantZoneState{Location{"s0"}, "x", zone_less1},
-								   ATAZoneState{logic::MTLFormula{AP{"l0"}}, zone_everything}}}));
+	CHECK(initial_word.ta_location == ta_location);
+	CHECK(initial_word.ta_clocks == ta_clocks);
+	CHECK(initial_word.ata_locations == ata_locations);
 }
 
 TEST_CASE("monotone_domination_order for zones", "[zones]")
 {
-	zones::Zone_slice zone0 = zones::Zone_slice{0, ZONE_INFTY, false, false, ZONE_INFTY};
-	zones::Zone_slice zone1 = zones::Zone_slice{1, ZONE_INFTY, false, false, ZONE_INFTY};
+	using CanonicalABZoneWord = search::CanonicalABZoneWord<std::string, std::string>;
+	using ATALocation = logic::MTLFormula<std::string>;
+
+	[[maybe_unused]] automata::ClockConstraint c_eq0 = automata::AtomicClockConstraintT<std::equal_to<Time>>(0);
+	[[maybe_unused]] automata::ClockConstraint c_ge1 = automata::AtomicClockConstraintT<std::greater_equal<Time>>(1);
+	[[maybe_unused]] automata::ClockConstraint c_gt2 = automata::AtomicClockConstraintT<std::greater<Time>>(2);
+	[[maybe_unused]] automata::ClockConstraint c_lt3 = automata::AtomicClockConstraintT<std::less<Time>>(3);
+
+	zones::Zone_DBM zone0 = zones::Zone_DBM{ {{"c0", c_eq0}}, 3};
+	zones::Zone_DBM zone1 = zones::Zone_DBM{ {{"c0", c_ge1}}, 3};
+	zones::Zone_DBM zone2 = zones::Zone_DBM{ {{"c0", c_eq0}, {"c1", c_ge1}}, 3};
+	zones::Zone_DBM zone3 = zones::Zone_DBM{ {{"c0", c_eq0}, {"a0", c_gt2}}, 3};
+	zones::Zone_DBM zone4 = zones::Zone_DBM{ {{"c0", c_eq0}, {"c1", c_ge1}, {"a0", c_gt2}}, 3};
 
 	CHECK(search::is_monotonically_dominated(
-	  CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone0}}}),
-	  CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone0}}})));
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {}, zone0),
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {}, zone0)));
 	CHECK(!search::is_monotonically_dominated(
-	  CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone0}}}),
-	  CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone1}}})));
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {}, zone0),
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {}, zone1)));
 	CHECK(!search::is_monotonically_dominated(
-	  CanonicalABWord(
-		{{PlantZoneState{Location{"s0"}, "c0", zone0}, ATAZoneState{logic::MTLFormula{AP{"a"}}, zone0}}}),
-	  CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone0}}})));
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {ATALocation{AP{"a0"}}}, zone3),
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {}, zone0)));
 	CHECK(search::is_monotonically_dominated(
-	  CanonicalABWord(
-		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone0}}}),
-	  CanonicalABWord(
-		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone0}}})));
+	  CanonicalABZoneWord({"s0"}, {"c0", "c1"}, {}, zone2),
+	  CanonicalABZoneWord({"s0"}, {"c0", "c1"}, {}, zone2)));
+	CHECK(search::is_monotonically_dominated(
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {ATALocation{AP{"a0"}}}, zone3),
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {ATALocation{AP{"a0"}}}, zone3)));
 	CHECK(!search::is_monotonically_dominated(
-	  CanonicalABWord(
-		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone1}},
-		 {ATAZoneState{logic::MTLFormula{AP{"a"}}, zone0}}}),
-	  CanonicalABWord(
-		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone1}}})));
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {ATALocation{AP{"a0"}}}, zone3),
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {}, zone0)));
 	CHECK(search::is_monotonically_dominated(
-	  CanonicalABWord(
-		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone1}}}),
-	  CanonicalABWord(
-		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone1}},
-		 {ATAZoneState{logic::MTLFormula{AP{"a"}}, zone0}}})));
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {}, zone0),
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {ATALocation{AP{"a0"}}}, zone3)));
 	CHECK(search::is_monotonically_dominated(
-	  CanonicalABWord({{PlantZoneState{Location{"s0"}, "c0", zone0}}}),
-	  CanonicalABWord(
-		{{PlantZoneState{Location{"s0"}, "c0", zone0}, PlantZoneState{Location{"s0"}, "c1", zone1}},
-		 {ATAZoneState{logic::MTLFormula{AP{"a"}}, zone0}}})));
+	  CanonicalABZoneWord({"s0"}, {"c0"}, {}, zone0),
+	  CanonicalABZoneWord({"s0"}, {"c0", "c1"}, {ATALocation{AP{"a0"}}}, zone4)));
 }
 
 TEST_CASE("Difference Bound Matrix tests", "[zones]")
@@ -727,6 +724,27 @@ TEST_CASE("Difference Bound Matrix tests", "[zones]")
 
 		CHECK(new_dbm.is_consistent());
 	}
+
+	SECTION("Testing Getting a Subset") {
+		Zone_DBM new_dbm{clocks, 5};
+
+		new_dbm.conjunct("x", c_lt1);
+		new_dbm.conjunct("y", c_eq3);
+		new_dbm.conjunct("z", c_eq3);
+
+		Zone_DBM small_dbm = new_dbm.get_subset({"x", "y"});
+		Zone_DBM should_be_dbm{std::set<std::string>{"x", "y"}, 5};
+
+		should_be_dbm.conjunct("x", c_lt1);
+		should_be_dbm.conjunct("y", c_eq3);
+
+		CHECK(small_dbm == should_be_dbm);
+
+		//Make sure there are no side effects
+		small_dbm.delay();
+		CHECK(!new_dbm.at("x", 0).infinity_);
+		CHECK(!new_dbm.at("y", 0).infinity_);
+	}
 }
 
 TEST_CASE("Manually Debugging Railway example", "[zones]") {
@@ -849,50 +867,67 @@ TEST_CASE("Manually Debugging Railway example", "[zones]") {
 
 	dbm.reset("t");
 	dbm.normalize();
-
-	CHECK(false);
 }
 
 TEST_CASE("Simple example using zones 1", "[zones]")
 {
 	using TreeSearch =
 		search::TreeSearch<automata::ta::Location<std::string>, std::string>;
+	using Location = automata::ta::Location<std::string>;
+	using CanonicalABZoneWord = search::CanonicalABZoneWord<Location, std::string>;
 
-	TimedAutomaton ta{{Location{"s0"}, Location{"s1"}, Location{"s2"}, Location{"bad"}, Location{"doom"}, Location{"death"}},
-		  {"transit", "c", "e"},
+	TimedAutomaton ta{{Location{"s0"}, Location{"s1"}, Location{"s2"}, Location{"bad"}, Location{"good"}, Location{"great"}, Location{"amazing"}},
+		  {"transit", "c1", "c2", "c3", "e1", "e2", "e3"},
 		  Location{"s0"},
-		  {Location{"s0"}, Location{"bad"},			 Location{"death"}},
+		  {Location{"s0"}, Location{"bad"}, Location{"amazing"}},
 		  {"x", "y"},
 		  {TATransition(Location{"s0"}, "transit", Location{"s1"}, {{"x", automata::AtomicClockConstraintT<std::equal_to<Time>>(2)}}, {"x"}),
 		   TATransition(Location{"s1"}, "transit", Location{"s2"}, {{"x", automata::AtomicClockConstraintT<std::equal_to<Time>>(2)}}, {"x"}),
 		   TATransition(Location{"s2"},
-						"c",
-						Location{"doom"}),
-		   TATransition(Location{"doom"},
-						"e",
-						Location{"death"}),
+						"c1",
+						Location{"good"}),
+		   TATransition(Location{"good"},
+						"c2",
+						Location{"great"}),
+			TATransition(Location{"great"},
+						"c3",
+						Location{"amazing"}),
 		   TATransition(Location{"s2"},
-						"e",
+						"e1",
+						Location{"bad"}, {{"x", automata::AtomicClockConstraintT<std::equal_to<Time>>(2)}}, {"x"}),
+			TATransition(Location{"good"},
+						"e2",
+						Location{"bad"}, {{"x", automata::AtomicClockConstraintT<std::equal_to<Time>>(2)}}, {"x"}),
+			TATransition(Location{"great"},
+						"e3",
 						Location{"bad"}, {{"x", automata::AtomicClockConstraintT<std::equal_to<Time>>(2)}}, {"x"})}};
 	
-	logic::AtomicProposition<std::string> c_AP{"c"};
-	logic::AtomicProposition<std::string> e_AP{"e"};
+	logic::AtomicProposition<std::string> c1_AP{"c1"};
+	logic::AtomicProposition<std::string> c2_AP{"c2"};
+	logic::AtomicProposition<std::string> c3_AP{"c3"};
+	logic::AtomicProposition<std::string> e1_AP{"e1"};
+	logic::AtomicProposition<std::string> e2_AP{"e2"};
+	logic::AtomicProposition<std::string> e3_AP{"e3"};
 	logic::AtomicProposition<std::string> transit_AP{"transit"};
 
-	logic::MTLFormula c{c_AP};
-	logic::MTLFormula e{e_AP};
+	logic::MTLFormula c1{c1_AP};
+	logic::MTLFormula c2{c2_AP};
+	logic::MTLFormula c3{c3_AP};
+	logic::MTLFormula e1{e1_AP};
+	logic::MTLFormula e2{e2_AP};
+	logic::MTLFormula e3{e3_AP};
 
-	logic::MTLFormula phi1 = e.dual_until(!c);
+	logic::MTLFormula phi1 = e1.dual_until(!c1) || e2.dual_until(!c2) || e3.dual_until(!c3);		
 
-	auto ata = mtl_ata_translation::translate(phi1, {e_AP, c_AP, transit_AP});
+	auto ata = mtl_ata_translation::translate(phi1, {e1_AP, e2_AP, e3_AP, c1_AP, c2_AP, c3_AP, transit_AP});
 
 	CAPTURE(ata);
 
 	visualization::ta_to_graphviz(ta)
 	  .render_to_file(fmt::format("simple_zone_ta.pdf"));
 
-	std::set<std::string> controller_actions = {"c"};
-	std::set<std::string> environment_actions = {"e", "transit"};
+	std::set<std::string> controller_actions = {"c1", "c2", "c3"};
+	std::set<std::string> environment_actions = {"e1", "e2", "e3", "transit"};
 
 	TreeSearch search{&ta,
 					  &ata,
@@ -904,10 +939,38 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 					  generate_heuristic<TreeSearch::Node>(),
 					  true};
 
+	CanonicalABZoneWord initial_word = CanonicalABZoneWord(ta.get_initial_configuration(),
+			                        ata.get_initial_configuration(),
+			                        2);
+
+	CHECK(!initial_word.ta_clocks.empty());
+
+	CHECK(*search.get_root()->zone_words.begin() == initial_word);
+
+	std::map<std::pair<tacos::RegionIndex, std::string>, std::set<CanonicalABZoneWord>> successors = 
+		search.compute_next_canonical_words(initial_word);
+
+	for(const auto &[timed_action, words] : successors) {
+		CHECK(!words.empty());
+		for(const auto &word : words) {
+			INFO(word);
+			CHECK(word.is_valid());
+			CHECK(ta.get_clocks() == word.ta_clocks);
+			//There are no transitions from s0 to s0
+			CHECK(word.ta_location != Location{"s0"});
+		}
+	}
+
 	search.build_tree(true);
+	
+	CHECK(search.get_root()->label == search::NodeLabel::TOP);
 
-	CHECK(search.get_root()->label != search::NodeLabel::TOP);
-
+	auto controller = controller_synthesis::create_controller(
+						search.get_root(), controller_actions, environment_actions, 2
+						);
+	
+	CHECK(search::verify_ta_controller(ta, controller, phi1, 2));
+	
 	#if USE_INTERACTIVE_VISUALIZATION
 		char              tmp_filename[] = "search_graph_XXXXXX.svg";
 		mkstemps(tmp_filename, 4);
@@ -917,6 +980,8 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 		visualization::search_tree_to_graphviz(*search.get_root(), false)
 		  .render_to_file(fmt::format("simple_zone_test.svg"));
 	#endif
+	visualization::ta_to_graphviz(controller, false)
+	  .render_to_file(fmt::format("simple_zone_controller.pdf"));
 }
 
 TEST_CASE("Simple example using zones 2", "[zones]")
@@ -978,25 +1043,7 @@ TEST_CASE("Simple example using zones 2", "[zones]")
 
 	search.build_tree(true);
 
-	CHECK(search.get_root()->label == search::NodeLabel::TOP);
-
-	#if true
-	#if USE_INTERACTIVE_VISUALIZATION
-		char              tmp_filename[] = "search_graph_XXXXXX.svg";
-		mkstemps(tmp_filename, 4);
-		std::filesystem::path tmp_file(tmp_filename);
-		visualization::search_tree_to_graphviz_interactive(search.get_root(), tmp_filename);
-	#else
-		visualization::search_tree_to_graphviz(*search.get_root(), false)
-		  .render_to_file(fmt::format("simple_LTL_test.svg"));
-	#endif
-	
-	visualization::ta_to_graphviz(controller_synthesis::create_controller(
-						search.get_root(), controller_actions, environment_actions, 2
-						),
-								  false)
-	  .render_to_file(fmt::format("LTL_test_controller.pdf"));
-	#endif
+	CHECK(search.get_root()->label != search::NodeLabel::TOP);
 }
 
 #if true
@@ -1079,7 +1126,7 @@ TEST_CASE("Railroad example using zones", "[zones]")
 		std::filesystem::path tmp_file(tmp_filename);
 		visualization::search_tree_to_graphviz_interactive(search.get_root(), tmp_filename);
 	#else
-		visualization::search_tree_to_graphviz(*search.get_root(), true)
+		visualization::search_tree_to_graphviz(*search.get_root(), false)
 		  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
 	#endif
 	

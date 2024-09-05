@@ -17,7 +17,8 @@ namespace tacos::search {
 
 /** Compute reg_a(w), which is w with all configuration components from B omitted.
  * The resulting word only contains configurations from the timed automaton A.
- * @param word The word to compute reg_a(word) of
+ * This is for regions.
+ * @param word The region word to compute reg_a(word) of
  * @return The word reg_a(word), which is the same as word, but without any configurations from the
  * ATA
  */
@@ -41,6 +42,22 @@ reg_a(const CanonicalABWord<Location, ConstraintSymbolType> &word)
 		}
 	}
 	return res;
+}
+
+/** Compute reg_a(w), which is w with all configuration components from B omitted.
+ * The resulting word only contains configurations from the timed automaton A.
+ * This is for zone.
+ * @param word The zone word to compute reg_a(word) of
+ * @return The word reg_a(word), which is the same as word, but without any configurations from the
+ * ATA
+ */
+template <typename Location, typename ConstraintSymbolType>
+CanonicalABZoneWord<Location, ConstraintSymbolType>
+reg_a(const CanonicalABZoneWord<Location, ConstraintSymbolType> &word)
+{
+	auto new_dbm = word.dbm.get_subset(word.ta_clocks);
+
+	return CanonicalABZoneWord<Location, ConstraintSymbolType>{word.ta_location, word.ta_clocks, {}, new_dbm};
 }
 
 } // namespace tacos::search

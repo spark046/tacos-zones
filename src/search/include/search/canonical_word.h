@@ -45,11 +45,14 @@ struct CanonicalABZoneWord {
 	std::set<std::string> ta_clocks;
 	//ATA Locations converted to strings are also the clock names
 	std::set<logic::MTLFormula<ConstraintSymbolT>> ata_locations;
-
-	Endpoint max_constant;
-
 	//Symbolic Valuations of the states are all stored in this DBM
 	zones::Zone_DBM dbm;
+
+
+	/** Empty constructor */
+	CanonicalABZoneWord() {
+
+	}
 
 	/** Construct a CanonicalABZoneWord out of real-valued Plant and ATA configurations
 	 * 
@@ -59,9 +62,9 @@ struct CanonicalABZoneWord {
 	 * @return A CanonicalABZoneWord where the zones correspond to there the real value is. E.g. if x := 2.5, then the zone is (2,3)
 	 */
 	CanonicalABZoneWord(const PlantConfiguration<LocationT>          &plant_configuration,
-						const ATAConfiguration<ConstraintSymbolType> &ata_configuration,
+						const ATAConfiguration<ConstraintSymbolT>    &ata_configuration,
 						const unsigned int                            K)
-	: max_constant(K)
+	: dbm(zones::Zone_DBM{std::set<std::string>{}, K})
 	{
 		//TA-Part
 		ta_location = plant_configuration.location;
@@ -99,19 +102,12 @@ struct CanonicalABZoneWord {
 
 	CanonicalABZoneWord(LocationT location,
 						std::set<std::string> ta_clocks,
-						std::set<logic::MTLFormula<ConstraintSymbolT>> ata_clocks,
-						Endpoint max_constant,
+						std::set<logic::MTLFormula<ConstraintSymbolT>> ata_locations,
 						zones::Zone_DBM dbm)
-	: ta_location(location), ta_clocks(ta_clocks), ata_locations(ata_clocks), max_constant(max_constant), dbm(dbm)
+	: ta_location(location), ta_clocks(ta_clocks), ata_locations(ata_locations), dbm(dbm)
 	{
-		//make sure the ta_clocks and ata_clocks are all contained in the dbm
-		assert( std::all_of(ta_clocks.begin(), ta_clocks.end(), [&dbm](const auto &clock) {
-				return std::find(dbm.get_clocks().begin(), dbm.get_clocks().end(), clock) != dbm.get_clocks().end();
-			}) &&
-				std::all_of(ata_locations.begin(), ata_locations.end(), [&dbm](const auto &location) {
-				return std::find(dbm.get_clocks().begin(), dbm.get_clocks().end(), ata_formula_to_string(location)) != dbm.get_clocks().end();
-			})
-		);
+		//make sure the ta_clocks and ata_clocks are all contained in the dbm and vice versa
+		assert(is_valid());
 	}
 
 	/**
@@ -136,6 +132,34 @@ struct CanonicalABZoneWord {
 		return false;
 	}
 
+	/** Checks whether this CanonicalWord is valid */
+	bool is_valid() const {
+		for(const auto &clock : ta_clocks) {
+			if(!dbm.has_clock(clock)) {
+				return false;
+			}
+		}
+
+		for(const auto &ata_location : ata_locations) {
+			if(!dbm.has_clock(ata_formula_to_string(ata_location))) {
+				return false;
+			}
+		}
+
+		for(const auto &clock : dbm.get_clocks()) {
+			if( std::find(ta_clocks.begin(), ta_clocks.end(), clock) != ta_clocks.end() ||
+				std::any_of(ata_locations.begin(), ata_locations.end(), [&clock](const auto &location) {
+					return ata_formula_to_string(location) == clock;
+				})) {
+					continue;
+				} else {
+					return false;
+				}
+		}
+
+		return dbm.is_consistent();
+	}
+
 	/**
 	 * Implicitly converts a CanonicalABZoneWord into a CanonicalABWord.
 	 * The word is partitioned in such a way, so that each partition has its own unique zone.
@@ -157,7 +181,7 @@ struct CanonicalABZoneWord {
 
 			std::size_t index = 0;
 			for(; index < ab_word.size(); index++) {
-				if(zone == get_zone_slice(*ab_word[index].begin(), max_constant)) {
+				if(zone == get_zone_slice(*ab_word[index].begin(), dbm.max_constant_)) {
 					ab_word[index].insert(ta_state);
 					break;
 				}
@@ -169,7 +193,7 @@ struct CanonicalABZoneWord {
 				std::size_t jndex = 0; //Terrible name, utterly ashamed of myself
 
 				for(; jndex < ab_word.size(); jndex++) {
-					zones::Zone_slice curr_zone = get_zone_slice(*ab_word[jndex].begin(), max_constant);
+					zones::Zone_slice curr_zone = get_zone_slice(*ab_word[jndex].begin(), dbm.max_constant_);
 					if(curr_zone < zone_to_insert) {
 						continue;
 					}
@@ -189,11 +213,11 @@ struct CanonicalABZoneWord {
 		//~~~~~~~~~~Construct ATA Part of CanonicalWord~~~~~~~~~~
 		for(const auto &ata_location : ata_locations) {
 			zones::Zone_slice zone = dbm.get_zone_slice(ata_formula_to_string(ata_location));
-			ATAZoneState<ConstraintSymbolT> ata_state{ata_location, ata_formula_to_string(ata_location), zone};
+			ATAZoneState<ConstraintSymbolT> ata_state{ata_location, zone};
 
 			std::size_t index = 0;
 			for(; index < ab_word.size(); index++) {
-				if(zone == get_zone_slice(*ab_word[index].begin(), max_constant)) {
+				if(zone == get_zone_slice(*ab_word[index].begin(), dbm.max_constant_)) {
 					ab_word[index].insert(ata_state);
 					break;
 				}
@@ -206,7 +230,7 @@ struct CanonicalABZoneWord {
 				std::size_t jndex = 0;
 
 				for(; jndex < ab_word.size(); jndex++) {
-					zones::Zone_slice curr_zone = get_zone_slice(*ab_word[jndex].begin(), max_constant);
+					zones::Zone_slice curr_zone = get_zone_slice(*ab_word[jndex].begin(), dbm.max_constant_);
 					if(curr_zone < zone_to_insert) {
 						continue;
 					}
@@ -233,9 +257,49 @@ struct CanonicalABZoneWord {
 	 * @return true if s1 is equal to s2
 	 */
 	friend bool
+	operator<(const CanonicalABZoneWord &s1, const CanonicalABZoneWord &s2) {
+		return  std::tie(s1.ta_location, s1.ta_clocks, s1.ata_locations, s1.dbm) <
+				std::tie(s2.ta_location, s2.ta_clocks, s2.ata_locations, s2.dbm);
+	}
+
+	/** Check two CanonicalABZoneWords for equality.
+	 * They must share the same ta_location, ta_clocks, ata_locations, and the same DBM and max_constant
+	 * @param s1 The first word
+	 * @param s2 The second word
+	 * @return true if s1 is equal to s2
+	 */
+	friend bool
 	operator==(const CanonicalABZoneWord &s1, const CanonicalABZoneWord &s2) {
 		return  s1.ta_location == s2.ta_location && s1.ta_clocks == s2.ta_clocks &&
-				s1.ata_locations == s2.ata_locations && s1.dbm == s2.dbm && s1.max_constant == s2.max_constant;
+				s1.ata_locations == s2.ata_locations && s1.dbm == s2.dbm;
+	}
+
+	friend std::ostream &
+	operator<<(std::ostream &os, const CanonicalABZoneWord &word) {
+		os << "{TA: " << word.ta_location << " | ";
+		bool first = true;
+		for(const auto &clock : word.ta_clocks) {
+			if(first) {
+				os << clock << ": " << word.dbm.get_zone_slice(clock);
+				first = false;
+			} else {
+				os << ", " << clock << ": " << word.dbm.get_zone_slice(clock);
+			}
+		}
+		os << " }";
+
+		os << "{ATA: ";
+		first = true;
+		for(const auto &ata_location : word.ata_locations) {
+			if(first) {
+				os << ata_location << ": " << word.dbm.get_zone_slice(ata_formula_to_string(ata_location));
+			} else {
+				os << ", " << ata_location << ": " << word.dbm.get_zone_slice(ata_formula_to_string(ata_location));
+			}
+		}
+		os << " }";
+
+		return os;
 	}
 };
 

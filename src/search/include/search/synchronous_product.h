@@ -211,6 +211,15 @@ get_time_successor(const CanonicalABWord<Location, ConstraintSymbolType> &word, 
 	return res;
 }
 
+template <typename Location /* TA::Location */, typename ConstraintSymbolType>
+std::pair<PlantConfiguration<Location>, ATAConfiguration<ConstraintSymbolType>>
+get_candidate(const CanonicalABZoneWord<Location, ConstraintSymbolType> &word)
+{
+	CanonicalABWord<Location, ConstraintSymbolType> region_word = word;
+
+	return get_candidate(region_word);
+}
+
 /**
  * @brief Get a concrete candidate-state for a given valid canonical word. The
  * candidate consists of a concrete TA-state and a concrete ATA-state.
