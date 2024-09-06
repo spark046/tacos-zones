@@ -876,6 +876,9 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 	using Location = automata::ta::Location<std::string>;
 	using CanonicalABZoneWord = search::CanonicalABZoneWord<Location, std::string>;
 
+	[[maybe_unused]] automata::ClockConstraint c_eq0 = automata::AtomicClockConstraintT<std::equal_to<Time>>(0);
+	[[maybe_unused]] automata::ClockConstraint c_eq2 = automata::AtomicClockConstraintT<std::equal_to<Time>>(2);
+
 	TimedAutomaton ta{{Location{"s0"}, Location{"s1"}, Location{"s2"}, Location{"bad"}, Location{"good"}, Location{"great"}, Location{"amazing"}},
 		  {"transit", "c1", "c2", "c3", "e1", "e2", "e3"},
 		  Location{"s0"},
@@ -921,7 +924,7 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 
 	auto ata = mtl_ata_translation::translate(phi1, {e1_AP, e2_AP, e3_AP, c1_AP, c2_AP, c3_AP, transit_AP});
 
-	CAPTURE(ata);
+	//CAPTURE(ata);
 
 	visualization::ta_to_graphviz(ta)
 	  .render_to_file(fmt::format("simple_zone_ta.pdf"));
@@ -945,6 +948,90 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 
 	CHECK(!initial_word.ta_clocks.empty());
 
+	//bug where two sink states lead to third canonical word being ignored
+	SECTION("Weird Bug where member of set is ignored") {
+		logic::MTLFormula<std::string> ata_location1 = e2.dual_until(!c2);
+		logic::MTLFormula<std::string> ata_location2 = e3.dual_until(!c3);
+		logic::MTLFormula<std::string> ata_location3 = ata.get_sink_location().value();
+		
+		zones::Zone_DBM dbm1{{"x", "y", search::ata_formula_to_string(ata_location1)}, 2};
+		dbm1.conjunct("x", c_eq0);
+		dbm1.conjunct("y", c_eq0);
+		dbm1.conjunct(search::ata_formula_to_string(ata_location1), c_eq0);
+		dbm1.delay();
+		dbm1.conjunct("x", c_eq2);
+		dbm1.reset("x");
+		dbm1.delay();
+		dbm1.conjunct("x", c_eq2);
+		dbm1.reset("x");
+
+		zones::Zone_DBM dbm2{{"x", "y", search::ata_formula_to_string(ata_location2)}, 2};
+		dbm2.conjunct("x", c_eq0);
+		dbm2.conjunct("y", c_eq0);
+		dbm2.conjunct(search::ata_formula_to_string(ata_location2), c_eq0);
+		dbm2.delay();
+		dbm2.conjunct("x", c_eq2);
+		dbm2.reset("x");
+		dbm2.delay();
+		dbm2.conjunct("x", c_eq2);
+		dbm2.reset("x");
+
+		zones::Zone_DBM dbm3{{"x", "y", search::ata_formula_to_string(ata_location3)}, 2};
+		dbm3.conjunct("x", c_eq0);
+		dbm3.conjunct("y", c_eq0);
+		dbm3.conjunct(search::ata_formula_to_string(ata_location3), c_eq0);
+		dbm3.delay();
+		dbm3.conjunct("x", c_eq2);
+		dbm3.reset("x");
+		dbm3.delay();
+		dbm3.conjunct("x", c_eq2);
+		dbm3.reset("x");
+
+		CHECK(dbm1.get_zone_slice("x") == zones::Zone_slice{0, 0, false, false, 2});
+		CHECK(dbm1.get_zone_slice("y") == zones::Zone_slice{2, 2, true, false, 2});
+		CHECK(dbm1.get_zone_slice(search::ata_formula_to_string(ata_location1)) == zones::Zone_slice{2, 2, true, false, 2});
+
+		CanonicalABZoneWord word1{Location{"good"}, {"x", "y"}, {ata_location1}, dbm1};
+		CanonicalABZoneWord word2{Location{"good"}, {"x", "y"}, {ata_location2}, dbm2};
+		CanonicalABZoneWord word3{Location{"good"}, {"x", "y"}, {ata_location3}, dbm3};
+
+		std::set<CanonicalABZoneWord> words{word1, word2, word3};
+
+		std::map<std::pair<tacos::RegionIndex, std::string>, std::set<CanonicalABZoneWord>> all_successors;
+
+		for(const auto &curr_word : words) {
+			std::map<std::pair<tacos::RegionIndex, std::string>, std::set<CanonicalABZoneWord>> successors = 
+				search.compute_next_canonical_words(curr_word);
+			CHECK(!successors.empty());
+			for(const auto &[key, set] : successors) {
+				if(!all_successors.insert({key, set}).second) {
+					all_successors.at(key).insert(set.begin(), set.end());
+				}
+			}
+
+			std::set<CanonicalABZoneWord> succ = successors.at(std::make_pair<tacos::RegionIndex, std::string>(0, "c2"));
+			INFO(succ);
+			//bool satisfiable = !std::all_of(std::begin(succ), std::end(succ), [](const auto &word) {
+			//		return std::find_if(std::begin(word.ata_locations), std::end(word.ata_locations), [](const auto &location) {
+			//			return location == 
+			//				logic::MTLFormula<std::string>{mtl_ata_translation::get_sink<std::string>()};
+			//		}) != std::end(word.ata_locations);
+			//	});
+			CHECK(1 != 1);
+		}
+
+		std::set<CanonicalABZoneWord> succ = all_successors.at(std::make_pair<tacos::RegionIndex, std::string>(0, "c2"));
+		INFO(succ);
+		CHECK(succ.size() == 3);
+		bool satisfiable = !std::all_of(std::begin(succ), std::end(succ), [](const auto &word) {
+				return std::find_if(std::begin(word.ata_locations), std::end(word.ata_locations), [](const auto &location) {
+					return location == 
+						logic::MTLFormula<std::string>{mtl_ata_translation::get_sink<std::string>()};
+				}) != std::end(word.ata_locations);
+			});
+		CHECK(satisfiable);
+	}
+
 	CHECK(*search.get_root()->zone_words.begin() == initial_word);
 
 	std::map<std::pair<tacos::RegionIndex, std::string>, std::set<CanonicalABZoneWord>> successors = 
@@ -964,11 +1051,10 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 	search.build_tree(true);
 	
 	CHECK(search.get_root()->label == search::NodeLabel::TOP);
-
+	
 	auto controller = controller_synthesis::create_controller(
 						search.get_root(), controller_actions, environment_actions, 2
 						);
-	
 	CHECK(search::verify_ta_controller(ta, controller, phi1, 2));
 	
 	#if USE_INTERACTIVE_VISUALIZATION

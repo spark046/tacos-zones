@@ -276,7 +276,7 @@ struct CanonicalABZoneWord {
 
 	friend std::ostream &
 	operator<<(std::ostream &os, const CanonicalABZoneWord &word) {
-		os << "{TA: " << word.ta_location << " | ";
+		os << "[ {TA: " << word.ta_location << " | ";
 		bool first = true;
 		for(const auto &clock : word.ta_clocks) {
 			if(first) {
@@ -297,7 +297,7 @@ struct CanonicalABZoneWord {
 				os << ", " << ata_location << ": " << word.dbm.get_zone_slice(ata_formula_to_string(ata_location));
 			}
 		}
-		os << " }";
+		os << " } ]";
 
 		return os;
 	}

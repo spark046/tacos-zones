@@ -539,7 +539,7 @@ public:
 				Location location = word.ta_location;
 
 				//new DBM for the TA part
-				zones::Zone_DBM ta_dbm = word.dbm.get_subset(word.ta_clocks);
+				zones::Zone_DBM ta_dbm = word.dbm;
 
 				if(delay) {
 					ta_dbm.delay();
@@ -573,7 +573,7 @@ public:
 					ta_dbm.normalize();
 
 					//3. Calculate new Location and set the TA successor
-					ta_word = CanonicalABZoneWord{curr_transition->second.target_, word.ta_clocks, {}, ta_dbm};
+					ta_word = CanonicalABZoneWord{curr_transition->second.target_, word.ta_clocks, {}, ta_dbm.get_subset(ta_->get_clocks())};
 				}
 
 				//The TA-Clocks will be empty if there was no valid transition
@@ -600,7 +600,7 @@ public:
 
 				for(const auto &start_location : start_locations) {
 					//New DBM used only to interserct the zone to get minimal models
-					zones::Zone_DBM new_dbm = word.dbm;
+					zones::Zone_DBM new_dbm = ta_dbm;
 
 					if(delay) {
 						new_dbm.delay();
@@ -735,7 +735,7 @@ public:
 				 std::set<CanonicalABZoneWord<Location, ConstraintSymbolType>>>
 			child_classes_zone;
 
-		if(!node->words.empty() && node->zone_words.empty() && is_region_canonical_word(*node->words.begin())) {
+		if(!node->words.empty() && node->zone_words.empty() && is_region_canonical_word(*node->words.begin()) && false) {
 			const auto time_successors = get_time_successors(node->words, K_);
 			for (std::size_t increment = 0; increment < time_successors.size(); ++increment) {
 				for (const auto &time_successor : time_successors[increment]) {
