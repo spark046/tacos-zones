@@ -40,6 +40,37 @@
  */
 namespace tacos::search {
 
+/** @brief Check if the node using regions has a satisfiable ATA configuration.
+ *
+ * If every word in the node contains an ATA sink location, then none of those configurations is
+ * satisfiable.
+ * @return false if every word contains an ATA sink location
+ */
+template <typename Location, typename ActionType, typename ConstraintSymbolType>
+bool
+has_satisfiable_ata_configuration(
+  const SearchTreeNode<CanonicalABWord<Location, ConstraintSymbolType>, Location, ActionType, ConstraintSymbolType> &node)
+{
+	return !std::all_of(std::begin(node.words), std::end(node.words), [](const auto &word) {
+		return std::any_of(std::begin(word), std::end(word), [](const auto &component) {
+			return std::find_if(
+					std::begin(component),
+					std::end(component),
+					[](const auto &region_symbol) {
+						return (std::holds_alternative<ATARegionState<ConstraintSymbolType>>(region_symbol)
+								&& std::get<ATARegionState<ConstraintSymbolType>>(region_symbol).location
+									== logic::MTLFormula<ConstraintSymbolType>{
+									mtl_ata_translation::get_sink<ConstraintSymbolType>()}) ||
+								(std::holds_alternative<ATAZoneState<ConstraintSymbolType>>(region_symbol)
+								&& std::get<ATAZoneState<ConstraintSymbolType>>(region_symbol).location
+									== logic::MTLFormula<ConstraintSymbolType>{
+									mtl_ata_translation::get_sink<ConstraintSymbolType>()});
+					})
+				!= std::end(component);
+		});
+	});
+}
+
 /** @brief Check if the node has a satisfiable ATA configuration.
  *
  * If every word in the node contains an ATA sink location, then none of those configurations is
@@ -49,45 +80,24 @@ namespace tacos::search {
 template <typename Location, typename ActionType, typename ConstraintSymbolType>
 bool
 has_satisfiable_ata_configuration(
-  const SearchTreeNode<Location, ActionType, ConstraintSymbolType> &node)
+  const SearchTreeNode<CanonicalABZoneWord<Location, ConstraintSymbolType>, Location, ActionType, ConstraintSymbolType> &node)
 {
-	if(node.words.empty()) {
-		return !std::all_of(std::begin(node.zone_words), std::end(node.zone_words), [](const auto &word) {
-			return std::find_if(std::begin(word.ata_locations), std::end(word.ata_locations), [](const auto &location) {
-				return location == 
-					logic::MTLFormula<ConstraintSymbolType>{mtl_ata_translation::get_sink<ConstraintSymbolType>()};
-			}) != std::end(word.ata_locations);
-		});
-	} else {
-		return !std::all_of(std::begin(node.words), std::end(node.words), [](const auto &word) {
-			return std::any_of(std::begin(word), std::end(word), [](const auto &component) {
-				return std::find_if(
-						std::begin(component),
-						std::end(component),
-						[](const auto &region_symbol) {
-							return (std::holds_alternative<ATARegionState<ConstraintSymbolType>>(region_symbol)
-									&& std::get<ATARegionState<ConstraintSymbolType>>(region_symbol).location
-										== logic::MTLFormula<ConstraintSymbolType>{
-										mtl_ata_translation::get_sink<ConstraintSymbolType>()}) ||
-									(std::holds_alternative<ATAZoneState<ConstraintSymbolType>>(region_symbol)
-									&& std::get<ATAZoneState<ConstraintSymbolType>>(region_symbol).location
-										== logic::MTLFormula<ConstraintSymbolType>{
-										mtl_ata_translation::get_sink<ConstraintSymbolType>()});
-						})
-					!= std::end(component);
-			});
-		});
-	}
+	return !std::all_of(std::begin(node.words), std::end(node.words), [](const auto &word) {
+		return std::find_if(std::begin(word.ata_locations), std::end(word.ata_locations), [](const auto &location) {
+			return location == 
+				logic::MTLFormula<ConstraintSymbolType>{mtl_ata_translation::get_sink<ConstraintSymbolType>()};
+		}) != std::end(word.ata_locations);
+	});
 }
 
 namespace details {
 
-template <typename Location, typename ActionType, typename ConstraintSymbolType>
+template <typename Location, typename ActionType, typename ConstraintSymbolType, typename CanonicalWord>
 void
-label_graph(SearchTreeNode<Location, ActionType, ConstraintSymbolType> *node,
+label_graph(SearchTreeNode<CanonicalWord, Location, ActionType, ConstraintSymbolType> *node,
             const std::set<ActionType>                                 &controller_actions,
             const std::set<ActionType>                                 &environment_actions,
-            std::set<SearchTreeNode<Location, ActionType, ConstraintSymbolType> *> &visited)
+            std::set<SearchTreeNode<CanonicalWord, Location, ActionType, ConstraintSymbolType> *> &visited)
 {
 	if (node->label != NodeLabel::UNLABELED) {
 		return;
@@ -173,19 +183,19 @@ label_graph(SearchTreeNode<Location, ActionType, ConstraintSymbolType> *node,
  * @param controller_actions The set of actions that the controller can select.
  * @param environment_actions The set of actions that the environment can select.
  */
-template <typename Location, typename ActionType, typename ConstraintSymbolType>
+template <typename Location, typename ActionType, typename ConstraintSymbolType, typename CanonicalWord>
 void
-label_graph(SearchTreeNode<Location, ActionType, ConstraintSymbolType> *node,
+label_graph(SearchTreeNode<CanonicalWord, Location, ActionType, ConstraintSymbolType> *node,
             const std::set<ActionType>                                 &controller_actions,
             const std::set<ActionType>                                 &environment_actions)
 {
-	std::set<SearchTreeNode<Location, ActionType, ConstraintSymbolType> *> visited;
+	std::set<SearchTreeNode<CanonicalWord, Location, ActionType, ConstraintSymbolType> *> visited;
 	return details::label_graph(node, controller_actions, environment_actions, visited);
 }
 
 /** @brief Search the configuration tree for a valid controller.
  *
- * This class implements the main algorithm to check the existence of a controller. It builds a
+ * This abstract class implements the main algorithm to check the existence of a controller. It builds a
  * search graph following the transitions of the plant (e.g., the TA) and the ATA and then labels
  * nodes recursively bottom-up.
  */
@@ -195,7 +205,9 @@ template <typename Location,
           bool use_location_constraints = false,
           typename Plant =
             automata::ta::TimedAutomaton<typename Location::UnderlyingType, ActionType>,
-          bool use_set_semantics = false>
+          bool use_set_semantics = false,
+		  typename Node = SearchTreeNode<CanonicalABWord<Location, ConstraintSymbolType>, Location, ActionType, ConstraintSymbolType>,
+		  typename CanonicalWord = CanonicalABWord<Location, ConstraintSymbolType>>
 class TreeSearch
 {
 public:
@@ -207,8 +219,6 @@ public:
 	    utilities::values_equal<use_set_semantics, false, ConstraintSymbolType>,
 	    utilities::values_equal<use_set_semantics, true, std::set<ConstraintSymbolType>>,
 	    std::void_t<void>>::type;
-	/** The corresponding Node type of this search. */
-	using Node = SearchTreeNode<Location, ActionType, ConstraintSymbolType>;
 
 	/** Initialize the search.
 	 * @param ta The plant to be controlled
@@ -253,44 +263,8 @@ public:
 		  std::all_of(environment_actions_.begin(), environment_actions_.end(), [this](const auto &a) {
 			  return controller_actions_.find(a) == controller_actions_.end();
 		  }));
-		if constexpr (use_location_constraints && use_set_semantics) {
-			// Already read a single empty symbol to skip l0.
-			const auto ata_configurations =
-			  ata->make_symbol_step(ata->get_initial_configuration(),
-			                        logic::AtomicProposition<ATAInputType>{{}});
-			std::set<CanonicalABWord<typename Plant::Location, ConstraintSymbolType>> initial_words;
-			for (const auto &ata_configuration : ata_configurations) {
-				initial_words.insert(
-				  get_canonical_word(ta->get_initial_configuration(), ata_configuration, K));
-			}
-
-			tree_root_ = std::make_shared<Node>(initial_words);
-		} else if(use_zones_) {
-			//TODO: Add zone support for location constraints and set semantics
-
-			std::multimap<std::string, automata::ClockConstraint> clock_constraints;
-
-			for(auto clock = ta->get_clocks().begin(); clock != ta->get_clocks().end(); clock++) {
-				clock_constraints.insert({*clock, automata::AtomicClockConstraintT<std::equal_to<Time>>(0)});
-			}
-			clock_constraints.insert({"l0", automata::AtomicClockConstraintT<std::equal_to<Time>>(0)});
-
-			tree_root_ = std::make_shared<Node>(
-			  std::set<CanonicalABZoneWord<typename Plant::Location, ConstraintSymbolType>>{
-			    CanonicalABZoneWord(ta->get_initial_configuration(),
-			                        ata->get_initial_configuration(),
-			                        K)});
-		} else {
-			tree_root_ = std::make_shared<Node>(
-			  std::set<CanonicalABWord<typename Plant::Location, ConstraintSymbolType>>{
-			    get_canonical_word(ta->get_initial_configuration(),
-			                       ata->get_initial_configuration(),
-			                       K)});
-		}
-		nodes_                                  = {{{}, tree_root_}};
-		heuristic                               = std::move(search_heuristic);
-		tree_root_->min_total_region_increments = 0;
-		add_node_to_queue(tree_root_.get());
+		
+		heuristic = std::move(search_heuristic);
 	}
 
 	/** Get the root of the search tree.
@@ -310,19 +284,11 @@ public:
 	bool
 	is_bad_node(Node *node) const
 	{
-		if(node->words.empty()) {
-			return std::any_of(node->zone_words.begin(), node->zone_words.end(), [this](const auto &word) {
-				const auto candidate = get_candidate(word);
-				return ta_->is_accepting_configuration(candidate.first)
-					&& ata_->is_accepting_configuration(candidate.second);
-			});
-		} else {
-			return std::any_of(node->words.begin(), node->words.end(), [this](const auto &word) {
-				const auto candidate = get_candidate(word);
-				return ta_->is_accepting_configuration(candidate.first)
-					&& ata_->is_accepting_configuration(candidate.second);
-			});
-		}
+		return std::any_of(node->words.begin(), node->words.end(), [this](const auto &word) {
+			const auto candidate = get_candidate(word);
+			return ta_->is_accepting_configuration(candidate.first)
+				&& ata_->is_accepting_configuration(candidate.second);
+		});
 	}
 
 	/** Add a node the processing queue. This adds a new task to the thread pool that expands the
@@ -480,38 +446,275 @@ public:
 	}
 
 	/** Get the current search nodes. */
-	const std::map<std::set<CanonicalABWord<Location, ConstraintSymbolType>>, std::shared_ptr<Node>> &
+	const std::map<std::set<CanonicalWord>, std::shared_ptr<Node>> &
 	get_nodes()
 	{
 		return nodes_;
 	}
 
-	/** Gets the minimum time that must elapse from 0 until the constraint can be satisfied */
-	RegionIndex
-	get_min_time_to_fulfill_constraint(automata::ClockConstraint constraint)
+	protected:
+
+	virtual
+	std::pair<std::set<Node *>, std::set<Node *>>
+	compute_children(Node *node) = 0;
+
+	std::pair<std::set<Node *>, std::set<Node *>>
+	insert_children(std::map<std::pair<RegionIndex, ActionType>, std::set<CanonicalWord>> child_classes, Node *node)
 	{
-		Endpoint constant = std::visit([](const auto &atomic_clock_constraint)
-						-> Time { return atomic_clock_constraint.get_comparand(); },
-						constraint); //Visit due to ClockConstraint being a variant
-
-		std::optional<int> relation_opt = automata::get_relation_index(constraint);
-		assert(relation_opt.has_value());
-		int relation = relation_opt.value();
-
-		switch (relation)
+		std::set<Node *> new_children;
+		std::set<Node *> existing_children;
+		// Create child nodes, where each child contains all successors words of
+		// the same reg_a class.
 		{
-		case 0: //less
-		case 1: //less_equal
-			return 0; //We don't need to wait at all
-		case 2: //equal_to
-		case 4: //greater_equal
-		case 5: //greater
-			return (RegionIndex) constant; //We need to wait until the constant
-			break;
-		default: //not_equal or other oopsie (We assume inequality constraints don't exist for zones)
-			assert(false);
-			break;
+			std::lock_guard lock{nodes_mutex_};
+			for (const auto &[timed_action, words] : child_classes) {
+				auto [child_it, is_new] = nodes_.insert({words, std::make_shared<Node>(words)});
+				const std::shared_ptr<Node> &child_ptr = child_it->second;
+				node->add_child(timed_action, child_ptr);
+				SPDLOG_TRACE("Action ({}, {}): Adding child {}",
+							timed_action.first,
+							timed_action.second,
+							words);
+				if (is_new) {
+					new_children.insert(child_ptr.get());
+				} else {
+					existing_children.insert(child_ptr.get());
+				}
+			}
 		}
+		return {new_children, existing_children};
+	}
+
+protected:
+
+	const Plant *const ta_;
+	const automata::ata::AlternatingTimedAutomaton<logic::MTLFormula<ConstraintSymbolType>,
+												   logic::AtomicProposition<ATAInputType>>
+		*const ata_;
+
+	const std::set<ActionType> controller_actions_;
+	const std::set<ActionType> environment_actions_;
+	RegionIndex                K_;
+	const bool                 incremental_labeling_;
+	const bool                 terminate_early_{false};
+	const bool                 use_zones_;
+
+	mutable std::mutex    nodes_mutex_;
+	std::shared_ptr<Node> tree_root_;
+	std::map<std::set<CanonicalWord>, std::shared_ptr<Node>> nodes_;
+	utilities::ThreadPool<long> pool_{utilities::ThreadPool<long>::StartOnInit::NO};
+	std::unique_ptr<Heuristic<long, SearchTreeNode<CanonicalWord, Location, ActionType, ConstraintSymbolType>>>
+	  heuristic;
+};
+
+/**
+ * This is the class for search trees using regions.
+ */
+template <typename Location,
+          typename ActionType,
+          typename ConstraintSymbolType = ActionType,
+          bool use_location_constraints = false,
+          typename Plant =
+            automata::ta::TimedAutomaton<typename Location::UnderlyingType, ActionType>,
+          bool use_set_semantics = false>
+class RegionTreeSearch : public TreeSearch<Location, ActionType, ConstraintSymbolType, use_location_constraints, Plant, use_set_semantics,
+									SearchTreeNode<CanonicalABWord<Location, ConstraintSymbolType>, Location, ActionType, ConstraintSymbolType>,
+									CanonicalABWord<Location, ConstraintSymbolType>>
+{
+	//C++ compilers are dumb dumbs and you cannot properly inherit from templated Base Classes
+	using Base = TreeSearch<Location, ActionType, ConstraintSymbolType, use_location_constraints, Plant, use_set_semantics,
+					SearchTreeNode<CanonicalABWord<Location, ConstraintSymbolType>, Location, ActionType, ConstraintSymbolType>,
+					CanonicalABWord<Location, ConstraintSymbolType>>;
+	using Base::ta_;
+	using Base::ata_;
+	using Base::controller_actions_;
+	using Base::environment_actions_;
+	using Base::K_;
+	using Base::tree_root_;
+	using Base::nodes_;
+
+	using Base::add_node_to_queue;
+	using Base::insert_children;
+
+	public:
+	using Node = SearchTreeNode<CanonicalABWord<Location, ConstraintSymbolType>, Location, ActionType, ConstraintSymbolType>;
+	/** The type of the input symbols that the ATA accepts. */
+	using ATAInputType =
+	  /* if use_set_semantics is true, then the ATASymbolT is the same as
+	   * std::set<ConstraintSymbolType>, otherwise it is just ConstraintSymbolType> */
+	  typename std::disjunction<
+	    utilities::values_equal<use_set_semantics, false, ConstraintSymbolType>,
+	    utilities::values_equal<use_set_semantics, true, std::set<ConstraintSymbolType>>,
+	    std::void_t<void>>::type;
+
+	/** Initialize the search tree using regions.
+	 * 
+	 * TODO: Allow for Heuristics as a parameter (doesn't work currently due to unique pointer)
+	 * @param ta The plant to be controlled
+	 * @param ata The specification of undesired behaviors
+	 * @param controller_actions The actions that the controller may decide to take
+	 * @param environment_actions The actions controlled by the environment
+	 * @param K The maximal constant occurring in a clock constraint
+	 * @param incremental_labeling True, if incremental labeling should be used (default=false)
+	 * @param terminate_early If true, cancel the children of a node that has already been labeled
+	 * @param search_heuristic The heuristic to use during tree expansion
+	 * @param use_zones Whether to use zones, otherwise regions are used
+	 */
+	RegionTreeSearch(
+		const Plant                           *ta,
+		automata::ata::AlternatingTimedAutomaton<logic::MTLFormula<ConstraintSymbolType>,
+												 logic::AtomicProposition<ATAInputType>> *ata,
+		std::set<ActionType>                   controller_actions,
+		std::set<ActionType>                   environment_actions,
+		RegionIndex                            K,
+		bool                                   incremental_labeling = false,
+		bool                                   terminate_early      = false)
+	: Base(ta, ata, controller_actions, environment_actions, K, incremental_labeling, terminate_early)
+	{
+		if constexpr (use_location_constraints && use_set_semantics) {
+			// Already read a single empty symbol to skip l0.
+			const auto ata_configurations =
+			  ata->make_symbol_step(ata->get_initial_configuration(),
+			                        logic::AtomicProposition<ATAInputType>{{}});
+			std::set<CanonicalABWord<typename Plant::Location, ConstraintSymbolType>> initial_words;
+			for (const auto &ata_configuration : ata_configurations) {
+				initial_words.insert(
+				  get_canonical_word(ta->get_initial_configuration(), ata_configuration, K));
+			}
+
+			tree_root_ = std::make_shared<Node>(initial_words);
+		} else {
+			tree_root_ = std::make_shared<Node>(
+			  std::set<CanonicalABWord<typename Plant::Location, ConstraintSymbolType>>{
+			    get_canonical_word(ta->get_initial_configuration(),
+			                       ata->get_initial_configuration(),
+			                       K)});
+		}
+		nodes_                                  = {{{}, tree_root_}};
+		tree_root_->min_total_region_increments = 0;
+		add_node_to_queue(tree_root_.get());
+	}
+
+	std::pair<std::set<Node *>, std::set<Node *>>
+	compute_children(Node *node)
+	{
+		if (node == nullptr) {
+			return {};
+		}
+		assert(node->get_children().empty());
+		std::map<std::pair<RegionIndex, ActionType>,
+				 std::set<CanonicalABWord<Location, ConstraintSymbolType>>>
+			child_classes;
+
+		const auto time_successors = get_time_successors(node->words, K_);
+		for (std::size_t increment = 0; increment < time_successors.size(); ++increment) {
+			for (const auto &time_successor : time_successors[increment]) {
+				std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>> successors =
+				get_next_canonical_words<Plant,
+										ActionType,
+										ConstraintSymbolType,
+										use_location_constraints,
+										use_set_semantics>(controller_actions_, environment_actions_)(
+								*ta_, *ata_, get_candidate(time_successor), increment, K_, false);
+
+				for (const auto &[symbol, successor] : successors) {
+					assert(
+					std::find(std::begin(controller_actions_), std::end(controller_actions_), symbol)
+						!= std::end(controller_actions_)
+					|| std::find(std::begin(environment_actions_), std::end(environment_actions_), symbol)
+						!= std::end(environment_actions_));
+					child_classes[std::make_pair(increment, symbol)].insert(successor);
+				}
+			}
+		}
+
+		return insert_children(child_classes, node);
+	}
+};
+
+/**
+ * This is the class for search trees using zones.
+ */
+template <typename Location,
+          typename ActionType,
+          typename ConstraintSymbolType = ActionType,
+          bool use_location_constraints = false,
+          typename Plant =
+            automata::ta::TimedAutomaton<typename Location::UnderlyingType, ActionType>,
+          bool use_set_semantics = false>
+class ZoneTreeSearch : public TreeSearch<Location, ActionType, ConstraintSymbolType, use_location_constraints, Plant, use_set_semantics,
+								  SearchTreeNode<CanonicalABZoneWord<Location, ConstraintSymbolType>, Location, ActionType, ConstraintSymbolType>,
+								  CanonicalABZoneWord<Location, ConstraintSymbolType>>
+{
+	//C++ compilers are dumb dumbs and you cannot properly inherit from templated Base Classes
+	using Base = TreeSearch<Location, ActionType, ConstraintSymbolType, use_location_constraints, Plant, use_set_semantics,
+					SearchTreeNode<CanonicalABZoneWord<Location, ConstraintSymbolType>, Location, ActionType, ConstraintSymbolType>,
+					CanonicalABZoneWord<Location, ConstraintSymbolType>>;
+	using Base::ta_;
+	using Base::ata_;
+	using Base::controller_actions_;
+	using Base::environment_actions_;
+	using Base::K_;
+	using Base::tree_root_;
+	using Base::nodes_;
+
+	using Base::add_node_to_queue;
+	using Base::insert_children;
+
+	public:
+	using Node = SearchTreeNode<CanonicalABZoneWord<Location, ConstraintSymbolType>, Location, ActionType, ConstraintSymbolType>;
+	/** The type of the input symbols that the ATA accepts. */
+	using ATAInputType =
+	  /* if use_set_semantics is true, then the ATASymbolT is the same as
+	   * std::set<ConstraintSymbolType>, otherwise it is just ConstraintSymbolType> */
+	  typename std::disjunction<
+	    utilities::values_equal<use_set_semantics, false, ConstraintSymbolType>,
+	    utilities::values_equal<use_set_semantics, true, std::set<ConstraintSymbolType>>,
+	    std::void_t<void>>::type;
+
+	/** Initialize the search tree using regions.
+	 * 
+	 * TODO: Allow for Heuristics as a parameter (doesn't work currently due to unique pointer)
+	 * @param ta The plant to be controlled
+	 * @param ata The specification of undesired behaviors
+	 * @param controller_actions The actions that the controller may decide to take
+	 * @param environment_actions The actions controlled by the environment
+	 * @param K The maximal constant occurring in a clock constraint
+	 * @param incremental_labeling True, if incremental labeling should be used (default=false)
+	 * @param terminate_early If true, cancel the children of a node that has already been labeled
+	 * @param search_heuristic The heuristic to use during tree expansion
+	 * @param use_zones Whether to use zones, otherwise regions are used
+	 */
+	ZoneTreeSearch(
+		const Plant                           *ta,
+		automata::ata::AlternatingTimedAutomaton<logic::MTLFormula<ConstraintSymbolType>,
+												 logic::AtomicProposition<ATAInputType>> *ata,
+		std::set<ActionType>                   controller_actions,
+		std::set<ActionType>                   environment_actions,
+		RegionIndex                            K,
+		bool                                   incremental_labeling = false,
+		bool                                   terminate_early      = false)
+	: Base(ta, ata, controller_actions, environment_actions, K, incremental_labeling, terminate_early)
+	{
+		if constexpr (use_location_constraints && use_set_semantics) {
+			//TODO: Add zone support for location constraints and set semantics
+		} else {
+			std::multimap<std::string, automata::ClockConstraint> clock_constraints;
+
+			for(auto clock = ta->get_clocks().begin(); clock != ta->get_clocks().end(); clock++) {
+				clock_constraints.insert({*clock, automata::AtomicClockConstraintT<std::equal_to<Time>>(0)});
+			}
+			clock_constraints.insert({"l0", automata::AtomicClockConstraintT<std::equal_to<Time>>(0)});
+
+			tree_root_ = std::make_shared<Node>(
+			  std::set<CanonicalABZoneWord<typename Plant::Location, ConstraintSymbolType>>{
+			    CanonicalABZoneWord(ta->get_initial_configuration(),
+			                        ata->get_initial_configuration(),
+			                        K)});
+		}
+		nodes_                                  = {{{}, tree_root_}};
+		tree_root_->min_total_region_increments = 0;
+		add_node_to_queue(tree_root_.get());
 	}
 
 	//private:
@@ -721,6 +924,7 @@ public:
 		return successors;
 	}
 
+	private:
 	std::pair<std::set<Node *>, std::set<Node *>>
 	compute_children(Node *node)
 	{
@@ -729,116 +933,25 @@ public:
 		}
 		assert(node->get_children().empty());
 		std::map<std::pair<RegionIndex, ActionType>,
-				 std::set<CanonicalABWord<Location, ConstraintSymbolType>>>
-			child_classes;
-		std::map<std::pair<RegionIndex, ActionType>,
 				 std::set<CanonicalABZoneWord<Location, ConstraintSymbolType>>>
-			child_classes_zone;
+			child_classes;
 
-		if(!node->words.empty() && node->zone_words.empty() && is_region_canonical_word(*node->words.begin()) && false) {
-			const auto time_successors = get_time_successors(node->words, K_);
-			for (std::size_t increment = 0; increment < time_successors.size(); ++increment) {
-				for (const auto &time_successor : time_successors[increment]) {
-					std::multimap<ActionType, CanonicalABWord<Location, ConstraintSymbolType>> successors =
-					get_next_canonical_words<Plant,
-											ActionType,
-											ConstraintSymbolType,
-											use_location_constraints,
-											use_set_semantics>(controller_actions_, environment_actions_)(
-									*ta_, *ata_, get_candidate(time_successor), increment, K_, use_zones_);
+		for(const auto &word : node->words) {
+			std::map<std::pair<RegionIndex, ActionType>,
+						std::set<CanonicalABZoneWord<Location, ConstraintSymbolType>>>
+				successors = compute_next_canonical_words(word);
 
-					for (const auto &[symbol, successor] : successors) {
-						assert(
-						std::find(std::begin(controller_actions_), std::end(controller_actions_), symbol)
-							!= std::end(controller_actions_)
-						|| std::find(std::begin(environment_actions_), std::end(environment_actions_), symbol)
-							!= std::end(environment_actions_));
-						child_classes[std::make_pair(increment, symbol)].insert(successor);
-					}
-				}
-			}
-		} else { //Zones
-			for(const auto &word : node->zone_words) {
-				std::map<std::pair<RegionIndex, ActionType>,
-						 std::set<CanonicalABZoneWord<Location, ConstraintSymbolType>>>
-					successors = compute_next_canonical_words(word);
-
-				//If this action and increment hasn't been taken yet, just insert it normally
-				//Otherwise insert the new canonical words into the set that is found at this key
-				for(const auto &[key, set] : successors) {
-					if(!child_classes_zone.insert({key, set}).second) {
-						child_classes_zone.at(key).insert(set.begin(), set.end());
-					}
+			//If this action and increment hasn't been taken yet, just insert it normally
+			//Otherwise insert the new canonical words into the set that is found at this key
+			for(const auto &[key, set] : successors) {
+				if(!child_classes.insert({key, set}).second) {
+					child_classes.at(key).insert(set.begin(), set.end());
 				}
 			}
 		}
 
-		std::set<Node *> new_children;
-		std::set<Node *> existing_children;
-		// Create child nodes, where each child contains all successors words of
-		// the same reg_a class.
-		{
-			std::lock_guard lock{nodes_mutex_};
-			if(child_classes.empty()) {
-				for (const auto &[timed_action, words] : child_classes_zone) {
-					//Convert Zone Words to CanonicalABWords for the node map
-					std::set<CanonicalABWord<Location, ConstraintSymbolType>> normal_words;
-					for(const auto &evil_word : words) {
-						normal_words.insert(evil_word);
-					}
-					auto [child_it, is_new] = nodes_.insert({normal_words, std::make_shared<Node>(words)});
-					const std::shared_ptr<Node> &child_ptr = child_it->second;
-					node->add_child(timed_action, child_ptr);
-					SPDLOG_TRACE("Action ({}, {}): Adding child {}",
-								timed_action.first,
-								timed_action.second,
-								words);
-					if (is_new) {
-						new_children.insert(child_ptr.get());
-					} else {
-						existing_children.insert(child_ptr.get());
-					}
-				}
-			} else {
-				for (const auto &[timed_action, words] : child_classes) {
-					auto [child_it, is_new] = nodes_.insert({words, std::make_shared<Node>(words)});
-					const std::shared_ptr<Node> &child_ptr = child_it->second;
-					node->add_child(timed_action, child_ptr);
-					SPDLOG_TRACE("Action ({}, {}): Adding child {}",
-								timed_action.first,
-								timed_action.second,
-								words);
-					if (is_new) {
-						new_children.insert(child_ptr.get());
-					} else {
-						existing_children.insert(child_ptr.get());
-					}
-				}
-			}
-		}
-		return {new_children, existing_children};
+		return insert_children(child_classes, node);
 	}
-
-private:
-
-	const Plant *const ta_;
-	const automata::ata::AlternatingTimedAutomaton<logic::MTLFormula<ConstraintSymbolType>,
-												   logic::AtomicProposition<ATAInputType>>
-		*const ata_;
-
-	const std::set<ActionType> controller_actions_;
-	const std::set<ActionType> environment_actions_;
-	RegionIndex                K_;
-	const bool                 incremental_labeling_;
-	const bool                 terminate_early_{false};
-	const bool                 use_zones_;
-
-	mutable std::mutex    nodes_mutex_;
-	std::shared_ptr<Node> tree_root_;
-	std::map<std::set<CanonicalABWord<Location, ConstraintSymbolType>>, std::shared_ptr<Node>> nodes_;
-	utilities::ThreadPool<long> pool_{utilities::ThreadPool<long>::StartOnInit::NO};
-	std::unique_ptr<Heuristic<long, SearchTreeNode<Location, ActionType, ConstraintSymbolType>>>
-	  heuristic;
 };
 
 } // namespace tacos::search

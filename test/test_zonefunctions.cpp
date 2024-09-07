@@ -34,33 +34,37 @@ namespace {
 
 using namespace tacos;
 
-using Configuration  = automata::ta::TAConfiguration<std::string>;
-using TimedAutomaton = automata::ta::TimedAutomaton<std::string, std::string>;
-using TATransition   = automata::ta::Transition<std::string, std::string>;
-using Location       = automata::ta::Location<std::string>;
-
-using AlternatingTimedAutomaton = automata::ata::AlternatingTimedAutomaton<std::string, std::string>;
-using ATATransition             = automata::ata::Transition<std::string, std::string>;
-using Formula                   = automata::ata::Formula<std::string>;
-using TrueFormula               = automata::ata::TrueFormula<std::string>;
-using FalseFormula              = automata::ata::FalseFormula<std::string>;
-using LocationFormula           = automata::ata::LocationFormula<std::string>;
-using ClockConstraintFormula    = automata::ata::ClockConstraintFormula<std::string>;
-using ConjunctionFormula        = automata::ata::ConjunctionFormula<std::string>;
-using DisjunctionFormula        = automata::ata::DisjunctionFormula<std::string>;
-using ResetClockFormula         = automata::ata::ResetClockFormula<std::string>;
-
-using AP                        = logic::AtomicProposition<std::string>;
-using TreeSearch =
-  search::TreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
-
-using PlantZoneState = search::PlantZoneState<Location>;
-using ATAZoneState = search::ATAZoneState<std::string>;
-using CanonicalABWord = search::CanonicalABWord<automata::ta::Location<std::string>, std::string>;
-using ATAConfiguration = automata::ata::Configuration<logic::MTLFormula<std::string>>;
+//using Configuration  = automata::ta::TAConfiguration<std::string>;
+//using TimedAutomaton = automata::ta::TimedAutomaton<std::string, std::string>;
+//using TATransition   = automata::ta::Transition<std::string, std::string>;
+//using Location       = automata::ta::Location<std::string>;
+//
+//using AlternatingTimedAutomaton = automata::ata::AlternatingTimedAutomaton<std::string, std::string>;
+//using ATATransition             = automata::ata::Transition<std::string, std::string>;
+//using Formula                   = automata::ata::Formula<std::string>;
+//using TrueFormula               = automata::ata::TrueFormula<std::string>;
+//using FalseFormula              = automata::ata::FalseFormula<std::string>;
+//using LocationFormula           = automata::ata::LocationFormula<std::string>;
+//using ClockConstraintFormula    = automata::ata::ClockConstraintFormula<std::string>;
+//using ConjunctionFormula        = automata::ata::ConjunctionFormula<std::string>;
+//using DisjunctionFormula        = automata::ata::DisjunctionFormula<std::string>;
+//using ResetClockFormula         = automata::ata::ResetClockFormula<std::string>;
+//
+//using AP                        = logic::AtomicProposition<std::string>;
+//using TreeSearch =
+//  search::TreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
+//
+//using PlantZoneState = search::PlantZoneState<Location>;
+//using ATAZoneState = search::ATAZoneState<std::string>;
+//using CanonicalABWord = search::CanonicalABWord<automata::ta::Location<std::string>, std::string>;
+//using ATAConfiguration = automata::ata::Configuration<logic::MTLFormula<std::string>>;
 
 TEST_CASE("Getting fulfilled Clock Constraints of a ta", "[zones]")
 {
+	using TimedAutomaton = automata::ta::TimedAutomaton<std::string, std::string>;
+	using TATransition   = automata::ta::Transition<std::string, std::string>;
+	using Location       = automata::ta::Location<std::string>;
+
 	automata::ClockConstraint c1 = automata::AtomicClockConstraintT<std::less<Time>>(1);
 	automata::ClockConstraint c2 = automata::AtomicClockConstraintT<std::greater<Time>>(1);
 	automata::ClockConstraint c3 = automata::AtomicClockConstraintT<std::equal_to<Time>>(1);
@@ -140,6 +144,16 @@ TEST_CASE("Delaying zones of zone states", "[zones]")
 
 TEST_CASE("Getting Clock Constraints from ATA", "[zones]")
 {
+	using AlternatingTimedAutomaton = automata::ata::AlternatingTimedAutomaton<std::string, std::string>;
+	using ATATransition             = automata::ata::Transition<std::string, std::string>;
+	using TrueFormula               = automata::ata::TrueFormula<std::string>;
+	using FalseFormula              = automata::ata::FalseFormula<std::string>;
+	using LocationFormula           = automata::ata::LocationFormula<std::string>;
+	using ClockConstraintFormula    = automata::ata::ClockConstraintFormula<std::string>;
+	using ConjunctionFormula        = automata::ata::ConjunctionFormula<std::string>;
+	using DisjunctionFormula        = automata::ata::DisjunctionFormula<std::string>;
+	using ResetClockFormula         = automata::ata::ResetClockFormula<std::string>;
+
 	automata::ClockConstraint constraint1 = automata::AtomicClockConstraintT<std::less<Time>>(1);
 	automata::ClockConstraint constraint2 = automata::AtomicClockConstraintT<std::equal_to<Time>>(3);
 	automata::ClockConstraint constraint3 = automata::AtomicClockConstraintT<std::greater_equal<Time>>(0);
@@ -189,7 +203,11 @@ TEST_CASE("Getting Clock Constraints from ATA", "[zones]")
 
 TEST_CASE("Canonical Word using zones", "[zones]")
 {
-	using CanonicalABZoneWord = search::CanonicalABZoneWord<automata::ta::Location<std::string>, std::string>;
+	using TimedAutomaton = automata::ta::TimedAutomaton<std::string, std::string>;
+	using Location = automata::ta::Location<std::string>;
+	using TATransition   = automata::ta::Transition<std::string, std::string>;
+	using CanonicalABZoneWord = search::CanonicalABZoneWord<Location, std::string>;
+	using AP = logic::AtomicProposition<std::string>;
 
 	[[maybe_unused]] automata::ClockConstraint c_eq0 = automata::AtomicClockConstraintT<std::equal_to<Time>>(0);
 
@@ -244,6 +262,7 @@ TEST_CASE("monotone_domination_order for zones", "[zones]")
 {
 	using CanonicalABZoneWord = search::CanonicalABZoneWord<std::string, std::string>;
 	using ATALocation = logic::MTLFormula<std::string>;
+	using AP = logic::AtomicProposition<std::string>;
 
 	[[maybe_unused]] automata::ClockConstraint c_eq0 = automata::AtomicClockConstraintT<std::equal_to<Time>>(0);
 	[[maybe_unused]] automata::ClockConstraint c_ge1 = automata::AtomicClockConstraintT<std::greater_equal<Time>>(1);
@@ -871,10 +890,12 @@ TEST_CASE("Manually Debugging Railway example", "[zones]") {
 
 TEST_CASE("Simple example using zones 1", "[zones]")
 {
-	using TreeSearch =
-		search::TreeSearch<automata::ta::Location<std::string>, std::string>;
+	using TimedAutomaton = automata::ta::TimedAutomaton<std::string, std::string>;
 	using Location = automata::ta::Location<std::string>;
+	using TATransition   = automata::ta::Transition<std::string, std::string>;
 	using CanonicalABZoneWord = search::CanonicalABZoneWord<Location, std::string>;
+	using TreeSearch =
+		search::ZoneTreeSearch<Location, std::string>;
 
 	[[maybe_unused]] automata::ClockConstraint c_eq0 = automata::AtomicClockConstraintT<std::equal_to<Time>>(0);
 	[[maybe_unused]] automata::ClockConstraint c_eq2 = automata::AtomicClockConstraintT<std::equal_to<Time>>(2);
@@ -938,8 +959,6 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 					  environment_actions,
 					  2,
 					  true,
-					  true,
-					  generate_heuristic<TreeSearch::Node>(),
 					  true};
 
 	CanonicalABZoneWord initial_word = CanonicalABZoneWord(ta.get_initial_configuration(),
@@ -1022,7 +1041,14 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 
 		std::set<CanonicalABZoneWord> succ = all_successors.at(std::make_pair<tacos::RegionIndex, std::string>(0, "c2"));
 		INFO(succ);
-		CHECK(succ.size() == 3);
+		std::size_t actual_size = 0;
+		for(auto iter1 = succ.rbegin(); iter1 != succ.rend(); ++iter1) {
+			INFO(*iter1);
+			CHECK(!(iter1 == iter1));
+			actual_size++;
+		}
+		CHECK(succ.size() == actual_size);
+		//Check whether there is something that does not have an ATA sink
 		bool satisfiable = !std::all_of(std::begin(succ), std::end(succ), [](const auto &word) {
 				return std::find_if(std::begin(word.ata_locations), std::end(word.ata_locations), [](const auto &location) {
 					return location == 
@@ -1030,9 +1056,9 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 				}) != std::end(word.ata_locations);
 			});
 		CHECK(satisfiable);
-	}
+	} //end SECTION
 
-	CHECK(*search.get_root()->zone_words.begin() == initial_word);
+	CHECK(*search.get_root()->words.begin() == initial_word);
 
 	std::map<std::pair<tacos::RegionIndex, std::string>, std::set<CanonicalABZoneWord>> successors = 
 		search.compute_next_canonical_words(initial_word);
@@ -1072,8 +1098,11 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 
 TEST_CASE("Simple example using zones 2", "[zones]")
 {
+	using TimedAutomaton = automata::ta::TimedAutomaton<std::string, std::string>;
+	using Location       = automata::ta::Location<std::string>;
+	using TATransition   = automata::ta::Transition<std::string, std::string>;
 	using TreeSearch =
-  search::TreeSearch<automata::ta::Location<std::string>, std::string>;
+		search::ZoneTreeSearch<Location, std::string>;
 
 	//Problem with this: Once "☐¬a" has been reached, a node is labelled bad and search terminates there (even without early termination).
 	//However, the action "a" can always still be taken, which would make the ATA go to a sink
@@ -1124,8 +1153,7 @@ TEST_CASE("Simple example using zones 2", "[zones]")
 					  5,
 					  true, //similar if false, every bad node is still "bad" despite not being so, everything else is just unknown
 					  false, //exact same if true
-					  generate_heuristic<TreeSearch::Node>(),
-					  true};
+					  };
 
 	search.build_tree(true);
 
@@ -1135,37 +1163,9 @@ TEST_CASE("Simple example using zones 2", "[zones]")
 #if true
 TEST_CASE("Railroad example using zones", "[zones]")
 {
-	using Location [[maybe_unused]] = automata::ta::Location<std::vector<std::string>>;
-	using TimedAutomaton [[maybe_unused]] = automata::ta::TimedAutomaton<Location, std::string>;
-
-	using TAConfiguration [[maybe_unused]] = PlantConfiguration<Location>;
-
-	using PlantState [[maybe_unused]] = search::PlantState<Location>;
-	using ATAState [[maybe_unused]] = search::ATAState<std::string>;
-	using CanonicalABWord [[maybe_unused]] = search::CanonicalABWord<Location, std::string>;
-	using PlantZoneState [[maybe_unused]] = search::PlantZoneState<Location>;
-	using ATAZoneState [[maybe_unused]] = search::ATAZoneState<std::string>;
-
-	[[maybe_unused]] zones::Zone_slice zone_all{0, 2, false, false, 2};
-	[[maybe_unused]] zones::Zone_slice zone_eq0{0, 0, false, false, 2};
-
-	logic::AtomicProposition<std::string> enter_1{"enter_1"};
-	logic::AtomicProposition<std::string> finish_close_1{"finish_close_1"};
-	logic::AtomicProposition<std::string> finish_open_1{"finish_open_1"};
-	logic::AtomicProposition<std::string> start_open_1{"start_open_1"};
-	logic::AtomicProposition<std::string> leave_1{"leave_1"};
-	logic::AtomicProposition<std::string> travel_1{"travel_1"};
-
-	logic::MTLFormula e{enter_1};
-	logic::MTLFormula f_c{finish_close_1};
-	logic::MTLFormula s_o{start_open_1};
-	logic::MTLFormula l{leave_1};
-	logic::MTLFormula t{travel_1};
-	logic::MTLFormula f_o{finish_open_1};
-
-	logic::MTLFormula phi1 = e.dual_until(!f_c);
-	logic::MTLFormula phi2 = s_o.dual_until(!l);
-	logic::MTLFormula phi3 = t.dual_until(!f_o);
+	using AP = logic::AtomicProposition<std::string>;
+	using TreeSearch =
+		search::ZoneTreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
 
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~START~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
@@ -1191,8 +1191,6 @@ TEST_CASE("Railroad example using zones", "[zones]")
 					  environment_actions,
 					  K,
 					  true,
-					  true,
-					  generate_heuristic<TreeSearch::Node>(),
 					  true};
 	
 	search.build_tree(true);
@@ -1212,7 +1210,7 @@ TEST_CASE("Railroad example using zones", "[zones]")
 		std::filesystem::path tmp_file(tmp_filename);
 		visualization::search_tree_to_graphviz_interactive(search.get_root(), tmp_filename);
 	#else
-		visualization::search_tree_to_graphviz(*search.get_root(), false)
+		visualization::search_tree_to_graphviz(*search.get_root(), true)
 		  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
 	#endif
 	

@@ -994,6 +994,30 @@ operator<<(std::ostream                                                         
 	return os;
 }
 
+/** Print a vector of CanonicalABWords. */
+template <typename LocationT, typename ConstraintSymbolType>
+std::ostream &
+operator<<(std::ostream                                                                    &os,
+           const std::vector<search::CanonicalABZoneWord<LocationT, ConstraintSymbolType>> &ab_words)
+{
+	if (ab_words.empty()) {
+		os << "{}";
+		return os;
+	}
+	os << "{ ";
+	bool first = true;
+	for (const auto &ab_word : ab_words) {
+		if (!first) {
+			os << ", ";
+		} else {
+			first = false;
+		}
+		os << ab_word;
+	}
+	os << " }";
+	return os;
+}
+
 } // namespace tacos::search
 
 namespace fmt {

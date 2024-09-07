@@ -725,7 +725,7 @@ namespace tacos::zones {
 
 			for(std::size_t i = 0; i < s1.size(); i++) {
 				for(std::size_t j = 0; j < s1.size(); j++) {
-					if(s2.at(i, j) < s1.at(i,j)) {
+					if(s2.at(i, j) < s1.at(i,j) || s2.at(i,j) == s1.at(i,j)) {
 						return false;
 					}
 				}

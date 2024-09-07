@@ -181,23 +181,23 @@ get_constraints_from_outgoing_action(
 	return res;
 }
 
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename CanonicalWord>
 void
 add_node_to_controller(
-  const search::SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> *const node,
+  const search::SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> *const node,
   std::set<ActionT>                                                          controller_actions,
   std::set<ActionT>                                                          environment_actions,
   RegionIndex                                                                K,
   bool                                                                       minimize_controller,
-  automata::ta::TimedAutomaton<std::set<search::CanonicalABWord<LocationT, ConstraintSymbolT>>,
+  automata::ta::TimedAutomaton<std::set<CanonicalWord>,
                                ActionT> *                                    controller)
 {
 	using search::NodeLabel;
 	using Transition =
-	  automata::ta::Transition<std::set<search::CanonicalABWord<LocationT, ConstraintSymbolT>>,
+	  automata::ta::Transition<std::set<CanonicalWord>,
 	                           ActionT>;
 	using Location =
-	  automata::ta::Location<std::set<search::CanonicalABWord<LocationT, ConstraintSymbolT>>>;
+	  automata::ta::Location<std::set<CanonicalWord>>;
 	if (node->label != NodeLabel::TOP) {
 		throw std::invalid_argument(
 		  "Cannot create a controller for a node that is not labeled with TOP");
@@ -210,40 +210,17 @@ add_node_to_controller(
 
 		bool new_location = false;
 
-		if(node->words.empty()) {
-			std::set<search::CanonicalABWord<LocationT, ConstraintSymbolT>> normal_succ_words;
-			for(const auto &evil_word : successor->zone_words) {
-				normal_succ_words.insert(evil_word);
-			}
-			std::set<search::CanonicalABWord<LocationT, ConstraintSymbolT>> normal_node_words;
-			for(const auto &evil_word : node->zone_words) {
-				normal_node_words.insert(evil_word);
-			}
-			new_location = controller->add_location(Location{normal_succ_words});
-			controller->add_final_location(Location{normal_succ_words});
+		new_location = controller->add_location(Location{successor->words});
+		controller->add_final_location(Location{successor->words});
 
-			for (const auto &[action, constraints] :
-				get_constraints_from_outgoing_action(node->zone_words, timed_action, K)) {
-				for (const auto &[clock, _constraint] : constraints) {
-					controller->add_clock(clock);
-				}
-				controller->add_action(action);
-				controller->add_transition(
-				Transition{Location{normal_node_words}, action, Location{normal_succ_words}, constraints, {}});
+		for (const auto &[action, constraints] :
+			get_constraints_from_outgoing_action(node->words, timed_action, K)) {
+			for (const auto &[clock, _constraint] : constraints) {
+				controller->add_clock(clock);
 			}
-		} else {
-			new_location = controller->add_location(Location{successor->words});
-			controller->add_final_location(Location{successor->words});
-
-			for (const auto &[action, constraints] :
-				get_constraints_from_outgoing_action(node->words, timed_action, K)) {
-				for (const auto &[clock, _constraint] : constraints) {
-					controller->add_clock(clock);
-				}
-				controller->add_action(action);
-				controller->add_transition(
-				Transition{Location{node->words}, action, Location{successor->words}, constraints, {}});
-			}
+			controller->add_action(action);
+			controller->add_transition(
+			Transition{Location{node->words}, action, Location{successor->words}, constraints, {}});
 		}
 
 		if (new_location) {
@@ -265,10 +242,10 @@ add_node_to_controller(
 
 } // namespace details
 
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
-automata::ta::TimedAutomaton<std::set<search::CanonicalABWord<LocationT, ConstraintSymbolT>>,
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename CanonicalWord>
+automata::ta::TimedAutomaton<std::set<CanonicalWord>,
                              ActionT>
-create_controller(const search::SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> *const root,
+create_controller(const search::SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> *const root,
                   std::set<ActionT> controller_actions,
                   std::set<ActionT> environment_actions,
                   RegionIndex       K,
@@ -277,23 +254,23 @@ create_controller(const search::SearchTreeNode<LocationT, ActionT, ConstraintSym
 	using namespace details;
 	using search::NodeLabel;
 	using Location =
-	  automata::ta::Location<std::set<search::CanonicalABWord<LocationT, ConstraintSymbolT>>>;
+	  automata::ta::Location<std::set<CanonicalWord>>;
 	
-	std::shared_ptr<automata::ta::TimedAutomaton<std::set<search::CanonicalABWord<LocationT, ConstraintSymbolT>>, ActionT>>
+	std::shared_ptr<automata::ta::TimedAutomaton<std::set<CanonicalWord>, ActionT>>
 		controller;
 
 	if(root->words.empty()) {
-		std::set<search::CanonicalABWord<LocationT, ConstraintSymbolT>> normal_words;
-		for(const auto &evil_word : root->zone_words) {
+		std::set<CanonicalWord> normal_words;
+		for(const auto &evil_word : root->words) {
 			normal_words.insert(evil_word);
 		}
 
 		controller = std::make_shared<automata::ta::TimedAutomaton<
-						std::set<search::CanonicalABWord<LocationT, ConstraintSymbolT>>, ActionT
+						std::set<CanonicalWord>, ActionT
 					>>(std::set<ActionT>{}, Location{normal_words}, std::set<Location>{});
 	} else {
 		controller = std::make_shared<automata::ta::TimedAutomaton<
-						std::set<search::CanonicalABWord<LocationT, ConstraintSymbolT>>, ActionT
+						std::set<CanonicalWord>, ActionT
 					>>(std::set<ActionT>{}, Location{root->words}, std::set<Location>{});
 	}
 

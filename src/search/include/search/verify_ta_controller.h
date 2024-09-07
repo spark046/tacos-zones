@@ -13,13 +13,13 @@ namespace tacos::search {
 using automata::ta::TimedAutomaton;
 
 /** Creates a synchronous product between a Plant TA and a Controller TA */
-template <typename LocationT, typename ActionType, typename ConstraintSymbolType>
-TimedAutomaton<std::pair<automata::ta::Location<LocationT>, automata::ta::Location<std::set<CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>>>, ActionType>
+template <typename CanonicalWord, typename LocationT, typename ActionType>
+TimedAutomaton<std::pair<automata::ta::Location<LocationT>, automata::ta::Location<std::set<CanonicalWord>>>, ActionType>
 create_product(const TimedAutomaton<LocationT, ActionType> &ta,
-			   const TimedAutomaton<std::set<search::CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>, ActionType> &controller)
+			   const TimedAutomaton<std::set<CanonicalWord>, ActionType> &controller)
 {
 	//Saving mouthfuls
-	using Controller_Location = std::set<search::CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>;
+	using Controller_Location = std::set<CanonicalWord>;
 
 	//For Product TA
 	using LocationType = std::pair<automata::ta::Location<LocationT>, automata::ta::Location<Controller_Location>>;
@@ -133,15 +133,15 @@ create_product(const TimedAutomaton<LocationT, ActionType> &ta,
  * @param controller The TA of the controller
  * @return True if the controller is correct, false otherwise
  */
-template <typename LocationT, typename ActionType, typename ConstraintSymbolType = ActionType>
+template <typename CanonicalWord, typename LocationT, typename ActionType, typename ConstraintSymbolType = ActionType>
 bool
 verify_ta_controller(const TimedAutomaton<LocationT, ActionType> &ta,
-					 const TimedAutomaton<std::set<search::CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>, ActionType> &controller,
+					 const TimedAutomaton<std::set<CanonicalWord>, ActionType> &controller,
 					 const logic::MTLFormula<ConstraintSymbolType> &spec,
 					 RegionIndex K)
 {
 	//Saving mouthfuls
-	using Controller_Location = std::set<search::CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>;
+	using Controller_Location = std::set<CanonicalWord>;
 
 	//For Product TA
 	using LocationType = std::pair<automata::ta::Location<LocationT>, automata::ta::Location<Controller_Location>>;
@@ -165,7 +165,7 @@ verify_ta_controller(const TimedAutomaton<LocationT, ActionType> &ta,
 	ata_actions.insert(actions.begin(), actions.end());
 
 	auto ata = mtl_ata_translation::translate(spec, ata_actions);
-	TreeSearch<Location, ActionType, ConstraintSymbolType> search{
+	RegionTreeSearch<Location, ActionType, ConstraintSymbolType> search{
 		&product,
 		&ata,
 		{},
@@ -179,11 +179,11 @@ verify_ta_controller(const TimedAutomaton<LocationT, ActionType> &ta,
 }
 
 /** Print a synchronous product's location. */
-template <typename LocationT, typename ConstraintSymbolType>
+template <typename LocationT, typename ConstraintSymbolType, typename CanonicalWord>
 std::ostream &
 operator<<(std::ostream &os, const std::pair<
 	automata::ta::Location<LocationT>,
-	automata::ta::Location<std::set<search::CanonicalABWord<automata::ta::Location<LocationT>, ConstraintSymbolType>>>> &location)
+	automata::ta::Location<std::set<CanonicalWord>>> &location)
 {
 	os << "(" << location.first << ", " << location.second << ")";
 	return os;

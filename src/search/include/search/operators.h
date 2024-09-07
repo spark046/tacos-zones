@@ -15,7 +15,7 @@
 
 namespace tacos::search {
 
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
+template <typename CanonicalWord, typename LocationT, typename ActionT, typename ConstraintSymbolT>
 class SearchTreeNode;
 
 /**
@@ -142,12 +142,12 @@ is_monotonically_dominated(const std::set<CanonicalABZoneWord<LocationT, Constra
  * been seen, the check is aborted.
  * @return true if the given node or one of its ancestors is monotonically dominated
  */
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename CanonicalWord>
 bool
 ancestor_is_monotonically_dominated(
-  const SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> &               node,
+  const SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> &               node,
   const std::set<CanonicalABWord<LocationT, ConstraintSymbolT>> &             words,
-  std::vector<const SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> *> &seen_nodes)
+  std::vector<const SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> *> &seen_nodes)
 {
 	if (std::find(std::begin(seen_nodes), std::end(seen_nodes), &node) != std::end(seen_nodes)) {
 		return false;
@@ -176,18 +176,18 @@ ancestor_is_monotonically_dominated(
  * been seen, the check is aborted.
  * @return true if the given node or one of its ancestors is monotonically dominated
  */
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename CanonicalWord>
 bool
 ancestor_is_monotonically_dominated(
-  const SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> &               node,
+  const SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> &               node,
   const std::set<CanonicalABZoneWord<LocationT, ConstraintSymbolT>> &             words,
-  std::vector<const SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> *> &seen_nodes)
+  std::vector<const SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> *> &seen_nodes)
 {
 	if (std::find(std::begin(seen_nodes), std::end(seen_nodes), &node) != std::end(seen_nodes)) {
 		return false;
 	}
 	seen_nodes.push_back(&node);
-	return is_monotonically_dominated(node.zone_words, words)
+	return is_monotonically_dominated(node.words, words)
 	       || std::any_of(node.parents.begin(),
 	                      node.parents.end(),
 	                      [&words, &seen_nodes](const auto &parent) {
@@ -199,24 +199,16 @@ ancestor_is_monotonically_dominated(
 /** Check if there is an ancestor that monotonally dominates the given node
  * @param node The node to check
  */
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename CanonicalWord>
 bool
-dominates_ancestor(SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> *node)
+dominates_ancestor(SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> *node)
 {
-	std::vector<const SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> *> seen_nodes = {node};
-	if(node->words.empty()) {
-		return std::any_of(node->parents.begin(),
-						   node->parents.end(),
-						  [node, &seen_nodes](const auto &parent) {
-								return ancestor_is_monotonically_dominated(*parent, node->zone_words, seen_nodes);
-						});
-	} else {
-		return std::any_of(node->parents.begin(),
-						   node->parents.end(),
-						  [node, &seen_nodes](const auto &parent) {
-								return ancestor_is_monotonically_dominated(*parent, node->words, seen_nodes);
-						});
-	}
+	std::vector<const SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> *> seen_nodes = {node};
+	return std::any_of(node->parents.begin(),
+					node->parents.end(),
+					[node, &seen_nodes](const auto &parent) {
+						return ancestor_is_monotonically_dominated(*parent, node->words, seen_nodes);
+				});
 }
 
 } // namespace tacos::search

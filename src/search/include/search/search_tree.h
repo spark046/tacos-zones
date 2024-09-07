@@ -56,14 +56,14 @@ enum class LabelReason {
 
 /** @brief A node in the search tree
  * @see TreeSearch */
-template <typename Location, typename ActionType, typename ConstraintSymbolType = ActionType>
+template <typename CanonicalWord, typename Location, typename ActionType, typename ConstraintSymbolType = ActionType>
 class SearchTreeNode
 {
 public:
 	/** Construct a node using regions.
 	 * @param words The CanonicalABWords of the node (being of the same reg_a class)
 	 */
-	SearchTreeNode(const std::set<CanonicalABWord<Location, ConstraintSymbolType>> &words)
+	SearchTreeNode(const std::set<CanonicalWord> &words)
 	: words(words)
 	{
 		// The constraints must be either over locations or over actions.
@@ -73,18 +73,6 @@ public:
 		assert(std::all_of(std::begin(words), std::end(words), [&words](const auto &word) {
 			return words.empty() || reg_a(*std::begin(words)) == reg_a(word);
 		}));
-	}
-
-	/** Construct a node using zones.
-	 * @param words The CanonicalABZoneWords of the node (being of the same reg_a class)
-	 */
-	SearchTreeNode(const std::set<CanonicalABZoneWord<Location, ConstraintSymbolType>> &words)
-	: zone_words(words)
-	{
-		// The constraints must be either over locations or over actions.
-		static_assert(std::is_same_v<Location, ConstraintSymbolType>
-		              || std::is_same_v<ActionType, ConstraintSymbolType>);
-		//TODO add back assert making sure reg_a part is always the same
 	}
 
 	/** @brief Set the node label and optionally cancel the children.
@@ -263,10 +251,9 @@ public:
 	 * @return false Otherwise
 	 */
 	bool
-	operator==(const SearchTreeNode<Location, ActionType, ConstraintSymbolType> &other) const
+	operator==(const SearchTreeNode<CanonicalWord, Location, ActionType, ConstraintSymbolType> &other) const
 	{
-		//if either words or zone_words isn't used, they should just be empty, so they should still be the same
-		return this->words == other.words && this->zone_words == other.zone_words && this->state == other.state && this->label == other.label
+		return this->words == other.words && this->state == other.state && this->label == other.label
 		  //&& this->parent == other.parent && this->children == other.children
 		  ;
 	}
@@ -301,10 +288,8 @@ public:
 		node->parents.insert(this);
 	}
 
-	/** The words of the node using zones*/
-	std::set<CanonicalABZoneWord<Location, ConstraintSymbolType>> zone_words;
-	/** The words of the node using regions */
-	std::set<CanonicalABWord<Location, ConstraintSymbolType>> words;
+	/** The words of the node */
+	std::set<CanonicalWord> words;
 	/** The state of the node */
 	std::atomic<NodeState> state = NodeState::UNKNOWN;
 	/** Whether we have a successful strategy in the node */
@@ -343,18 +328,14 @@ std::ostream &operator<<(std::ostream &os, const search::LabelReason &reason);
  * @param print_children If true, also print the node's children (not implemented)
  * @param indent The indentation to insert before this node, should be the distance to the root node
  */
-template <typename Location, typename ActionType, typename ConstraintSymbolType>
+template <typename Location, typename ActionType, typename ConstraintSymbolType, typename CanonicalWord>
 void
 print_to_ostream(std::ostream                                                             &os,
-                 const search::SearchTreeNode<Location, ActionType, ConstraintSymbolType> &node,
+                 const search::SearchTreeNode<Location, ActionType, ConstraintSymbolType, CanonicalWord> &node,
                  __attribute__((unused)) bool         print_children = false,
                  __attribute__((unused)) unsigned int indent         = 0)
 {
-	if(node.words.empty()) {
-		os << node.zone_words << ": " << node.state << " " << node.label;
-	} else {
-		os << node.words << ": " << node.state << " " << node.label;
-	}
+	os << node.words << ": " << node.state << " " << node.label;
 }
 
 /** Print a node
@@ -362,10 +343,10 @@ print_to_ostream(std::ostream                                                   
  * @param node The node to print
  * @return A reference to the ostream
  */
-template <typename Location, typename ActionType, typename ConstraintSymbolType>
+template <typename Location, typename ActionType, typename ConstraintSymbolType, typename CanonicalWord>
 std::ostream &
 operator<<(std::ostream                                                             &os,
-           const search::SearchTreeNode<Location, ActionType, ConstraintSymbolType> &node)
+           const search::SearchTreeNode<Location, ActionType, ConstraintSymbolType, CanonicalWord> &node)
 {
 	print_to_ostream(os, node);
 	return os;
@@ -376,9 +357,9 @@ operator<<(std::ostream                                                         
  * @param print_children If true, also print the node's children
  * @return A string representation of the node
  */
-template <typename Location, typename ActionType, typename ConstraintSymbolType>
+template <typename Location, typename ActionType, typename ConstraintSymbolType, typename CanonicalWord>
 std::string
-node_to_string(const search::SearchTreeNode<Location, ActionType, ConstraintSymbolType> &node,
+node_to_string(const search::SearchTreeNode<Location, ActionType, ConstraintSymbolType, CanonicalWord> &node,
                bool print_children = false)
 {
 	std::stringstream str;
@@ -391,12 +372,12 @@ node_to_string(const search::SearchTreeNode<Location, ActionType, ConstraintSymb
  * @param nodes The node pointers to print
  * @return A reference to the ostream
  */
-template <typename Location, typename ActionType, typename ConstraintSymbolType>
+template <typename Location, typename ActionType, typename ConstraintSymbolType, typename CanonicalWord>
 std::ostream &
 operator<<(
   std::ostream &os,
   const std::vector<
-    std::shared_ptr<search::SearchTreeNode<Location, ActionType, ConstraintSymbolType>>> &nodes)
+    std::shared_ptr<search::SearchTreeNode<Location, ActionType, ConstraintSymbolType, CanonicalWord>>> &nodes)
 {
 	for (const auto &node : nodes) {
 		os << *node;
@@ -423,15 +404,15 @@ struct formatter<tacos::search::LabelReason> : ostream_formatter
 {
 };
 
-template <typename Location, typename ActionType, typename ConstraintSymbolType>
-struct formatter<tacos::search::SearchTreeNode<Location, ActionType, ConstraintSymbolType>>
+template <typename Location, typename ActionType, typename ConstraintSymbolType, typename CanonicalWord>
+struct formatter<tacos::search::SearchTreeNode<Location, ActionType, ConstraintSymbolType, CanonicalWord>>
 : ostream_formatter
 {
 };
 
-template <typename Location, typename ActionType, typename ConstraintSymbolType>
+template <typename Location, typename ActionType, typename ConstraintSymbolType, typename CanonicalWord>
 struct formatter<std::vector<
-  std::shared_ptr<tacos::search::SearchTreeNode<Location, ActionType, ConstraintSymbolType>>>>
+  std::shared_ptr<tacos::search::SearchTreeNode<Location, ActionType, ConstraintSymbolType, CanonicalWord>>>>
 : ostream_formatter
 {
 };

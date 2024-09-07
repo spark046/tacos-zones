@@ -21,6 +21,83 @@ namespace tacos::visualization {
 
 using search::LabelReason;
 
+/** Formats a CanonicalABWord into a vector of strings, so that they represent the word
+ * 
+ * @return A pair containing the Plant-Location as a string and a vector of strings that represent the clock valuations
+ * pair: (plant_location, vector<clock_valuations>)
+ */
+template <typename LocationT, typename ConstraintSymbolT>
+std::pair<std::string, std::vector<std::string>>
+get_word_labelling(const search::CanonicalABWord<LocationT, ConstraintSymbolT> &word)
+{
+	std::string program_label;
+	std::vector<std::string> word_labels;
+	for (const auto &word_partition : word) {
+		std::vector<std::string> partition_labels;
+		for (const auto &symbol : word_partition) {
+			if (std::holds_alternative<tacos::search::PlantRegionState<LocationT>>(symbol)) {
+				const auto plant_location = std::get<tacos::search::PlantRegionState<LocationT>>(symbol);
+				if (program_label.empty()) {
+					std::stringstream s;
+					s << plant_location.location;
+					program_label = s.str();
+				}
+				partition_labels.push_back(
+				fmt::format("({}, {})", plant_location.clock, plant_location.symbolic_valuation));
+			} else if(std::holds_alternative<tacos::search::PlantZoneState<LocationT>>(symbol)) {
+				const auto plant_location = std::get<tacos::search::PlantZoneState<LocationT>>(symbol);
+				if(program_label.empty()) {
+					std::stringstream s;
+					s << plant_location.location;
+					program_label = s.str();
+				}
+				partition_labels.push_back(
+					fmt::format("({}, {})", plant_location.clock, plant_location.symbolic_valuation)
+				);
+			} else {
+				std::stringstream str;
+				str << symbol;
+				partition_labels.push_back(str.str());
+			}
+		}
+		word_labels.push_back(fmt::format("{}", fmt::join(partition_labels, ", ")));
+	}
+
+	program_label += " REGION";
+
+	return std::make_pair(program_label, word_labels);
+}
+
+/** Formats a CanonicalABZoneWord into a vector of strings, so that they represent the word
+ * 
+ * @return A pair containing the TA-Location as a string and a vector of strings that represent the clock valuations
+ * pair: (ta_location, vector<clock_valuations>)
+ */
+template <typename LocationT, typename ConstraintSymbolT>
+std::pair<std::string, std::vector<std::string>>
+get_word_labelling(const search::CanonicalABZoneWord<LocationT, ConstraintSymbolT> &word)
+{
+	std::stringstream s;
+	s << word.ta_location;
+	std::string program_label = s.str();
+	std::vector<std::string> word_labels;
+
+	for(const auto &clock : word.ta_clocks) {
+		word_labels.push_back(
+				fmt::format("({}, {})", clock, word.dbm.get_zone_slice(clock)));
+	}
+
+	for(const auto &ata_location : word.ata_locations) {
+		std::string clock = search::ata_formula_to_string(ata_location);
+		word_labels.push_back(
+				fmt::format("({}, {})", clock, word.dbm.get_zone_slice(clock)));
+	}
+
+	program_label += " ZONE";
+
+	return std::make_pair(program_label, word_labels);
+}
+
 /** @brief Add a search tree node to a dot graph visualization of the search tree.
  *
  * Add node as dot node to the graph. Additionally, add all its children along
@@ -30,12 +107,12 @@ using search::LabelReason;
  * @param node_selector Optional node selector to select only some nodes, e.g., skip canceled nodes
  * @return The graphviz node, which can be used as reference for adding additional edges.
  */
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename CanonicalWord>
 std::optional<utilities::graphviz::Node>
 add_search_node_to_graph(
-  const search::SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> *search_node,
+  const search::SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> *search_node,
   utilities::graphviz::Graph                                          *graph,
-  std::function<bool(const search::SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> &)>
+  std::function<bool(const search::SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> &)>
     node_selector)
 {
 	if (!node_selector(*search_node)) {
@@ -43,83 +120,14 @@ add_search_node_to_graph(
 	}
 	std::vector<std::string> words_labels;
 	std::string              program_label;
-	if(search_node->words.empty()) {
-		for (const auto &zone_word : search_node->zone_words) {
-			search::CanonicalABWord<LocationT, ConstraintSymbolT> word = zone_word;
-			std::vector<std::string> word_labels;
-			for (const auto &word_partition : word) {
-				std::vector<std::string> partition_labels;
-				for (const auto &symbol : word_partition) {
-					if (std::holds_alternative<tacos::search::PlantRegionState<LocationT>>(symbol)) {
-						const auto plant_location = std::get<tacos::search::PlantRegionState<LocationT>>(symbol);
-						if (program_label.empty()) {
-							std::stringstream s;
-							s << plant_location.location;
-							program_label = s.str();
-						}
-						partition_labels.push_back(
-						fmt::format("({}, {})", plant_location.clock, plant_location.symbolic_valuation));
-					} else if(std::holds_alternative<tacos::search::PlantZoneState<LocationT>>(symbol)) {
-						const auto plant_location = std::get<tacos::search::PlantZoneState<LocationT>>(symbol);
-						if(program_label.empty()) {
-							std::stringstream s;
-							s << plant_location.location;
-							program_label = s.str();
-						}
-						partition_labels.push_back(
-							fmt::format("({}, {})", plant_location.clock, plant_location.symbolic_valuation)
-						);
-					} else {
-						std::stringstream str;
-						str << symbol;
-						partition_labels.push_back(str.str());
-					}
-				}
-				word_labels.push_back(fmt::format("{}", fmt::join(partition_labels, ", ")));
-			}
-			// Split the partitions into node sections (by using "|" as separator).
-			// Put each word in its own group (with {}) so it is separated from the other words.
-			words_labels.push_back(fmt::format("{{ {} }}", fmt::join(word_labels, " | ")));
+	for (const auto &word : search_node->words) {
+		auto label_pair = get_word_labelling(word);
+		if(program_label.empty()) {
+			program_label = label_pair.first;
 		}
-		program_label += " ZONE";
-	} else {
-		for (const auto &word : search_node->words) {
-			std::vector<std::string> word_labels;
-			for (const auto &word_partition : word) {
-				std::vector<std::string> partition_labels;
-				for (const auto &symbol : word_partition) {
-					if (std::holds_alternative<tacos::search::PlantRegionState<LocationT>>(symbol)) {
-						const auto plant_location = std::get<tacos::search::PlantRegionState<LocationT>>(symbol);
-						if (program_label.empty()) {
-							std::stringstream s;
-							s << plant_location.location;
-							program_label = s.str();
-						}
-						partition_labels.push_back(
-						fmt::format("({}, {})", plant_location.clock, plant_location.symbolic_valuation));
-					} else if(std::holds_alternative<tacos::search::PlantZoneState<LocationT>>(symbol)) {
-						const auto plant_location = std::get<tacos::search::PlantZoneState<LocationT>>(symbol);
-						if(program_label.empty()) {
-							std::stringstream s;
-							s << plant_location.location;
-							program_label = s.str();
-						}
-						partition_labels.push_back(
-							fmt::format("({}, {})", plant_location.clock, plant_location.symbolic_valuation)
-						);
-					} else {
-						std::stringstream str;
-						str << symbol;
-						partition_labels.push_back(str.str());
-					}
-				}
-				word_labels.push_back(fmt::format("{}", fmt::join(partition_labels, ", ")));
-			}
-			// Split the partitions into node sections (by using "|" as separator).
-			// Put each word in its own group (with {}) so it is separated from the other words.
-			words_labels.push_back(fmt::format("{{ {} }}", fmt::join(word_labels, " | ")));
-		}
-		program_label += " REGION";
+		// Split the partitions into node sections (by using "|" as separator).
+		// Put each word in its own group (with {}) so it is separated from the other words.
+		words_labels.push_back(fmt::format("{{ {} }}", fmt::join(label_pair.second, " | ")));
 	}
 
 	std::string label_reason;
@@ -167,11 +175,11 @@ add_search_node_to_graph(
  * @param node_selector Optional node selector to select only some nodes, e.g., skip canceled nodes
  * @return The search tree converted to a dot graph
  */
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename CanonicalWord>
 utilities::graphviz::Graph
 search_tree_to_graphviz(
-  const search::SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> &search_node,
-  std::function<bool(const search::SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> &)>
+  const search::SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> &search_node,
+  std::function<bool(const search::SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> &)>
     node_selector)
 {
 	utilities::graphviz::Graph graph;
@@ -187,19 +195,19 @@ search_tree_to_graphviz(
  * @param skip_canceled If true, skip nodes that have been canceled
  * @return The search tree converted to a dot graph
  */
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename CanonicalWord>
 utilities::graphviz::Graph
 search_tree_to_graphviz(
-  const search::SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> &search_node,
-  bool                                                                 skip_canceled = false)
+  const search::SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> &search_node,
+  bool                                                                                skip_canceled = false)
 {
 	utilities::graphviz::Graph graph;
 	graph.set_property("rankdir", "LR");
 	graph.set_default_node_property("shape", "record");
-	std::function<bool(const search::SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> &)>
+	std::function<bool(const search::SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> &)>
 	  selector =
 	    [skip_canceled](
-	      const search::SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> &node) -> bool {
+	      const search::SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> &node) -> bool {
 		return !skip_canceled || node.label != search::NodeLabel::CANCELED;
 	};
 	add_search_node_to_graph(&search_node, &graph, selector);

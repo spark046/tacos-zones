@@ -66,14 +66,14 @@ create_selector_map(
  * @param output_path The path of the output file to write after each iteration.
  * @param is The input stream to read from, defaults to standard input.
  */
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename CanonicalWord>
 void
 search_tree_to_graphviz_interactive(
-  const search::SearchTreeNode<LocationT, ActionT, ConstraintSymbolT> *search_node,
+  const search::SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> *search_node,
   const std::filesystem::path                                         &output_path,
   std::istream                                                        &is = std::cin)
 {
-	using Node = search::SearchTreeNode<LocationT, ActionT, ConstraintSymbolT>;
+	using Node = search::SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT>;
 	std::vector<const Node *>         selected_nodes = {search_node};
 	const Node                       *last_node      = search_node;
 	std::function<bool(const Node &)> selector       = [&selected_nodes](const Node &node) {
