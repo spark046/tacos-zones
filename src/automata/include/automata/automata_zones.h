@@ -255,8 +255,8 @@ namespace tacos::zones {
 		operator<(const Zone_slice &s1, const Zone_slice &s2) //Use forward_as_tuple instead of tie due to rvalues
 		{
 			//Logical negation, since strict is usually smaller, and false == 0. Not really that important
-			return std::forward_as_tuple(s1.lower_bound_, s1.upper_bound_, !s1.lower_isOpen_, !s1.upper_isOpen_, s1.max_constant_)
-			       < std::forward_as_tuple(s2.lower_bound_, s2.upper_bound_, !s2.lower_isOpen_, !s2.upper_isOpen_, s2.max_constant_);
+			return std::forward_as_tuple(s1.lower_bound_, s1.upper_bound_, s1.lower_isOpen_, !s1.upper_isOpen_, s1.max_constant_)
+			       < std::forward_as_tuple(s2.lower_bound_, s2.upper_bound_, s2.lower_isOpen_, !s2.upper_isOpen_, s2.max_constant_);
 		}
 
 		/** Check two symbolic states for equality.
@@ -549,9 +549,18 @@ namespace tacos::zones {
 		 * 
 		 * @param clocks The set of all clocks that will be covered by this zone
 		 * @param max_constant The maximal constant that can appear for any given clock
+		 * @param reset_clocks True if all clocks should be initialized as 0, false if all clocks should be left unbounded
 		 */
-		Zone_DBM(std::set<std::string> clocks, Endpoint max_constant) : max_constant_(max_constant) {
+		Zone_DBM(std::set<std::string> clocks, Endpoint max_constant, bool reset_clocks = false) : max_constant_(max_constant) {
 			graph_ = Graph(clocks);
+
+			if(reset_clocks) {
+				for(const auto &clock : clocks) {
+					reset(clock);
+				}
+
+				graph_.floyd_warshall();
+			}
 		}
 
 		/** Construct the initial Zone Difference Bound Matrix (DBM) for the given clock constraints.
@@ -708,32 +717,6 @@ namespace tacos::zones {
 		//Max constant that may appear in any zone
 		Endpoint max_constant_;
 
-		/** Compare two DBMs.
-		 * Not really a lot of theoretical meaning. Just for sets to be happy
-		 * 
-		 * @param s1 The first dbm
-		 * @param s2 The second dbm
-		 * @return true if s1 is smaller than s2
-		 */
-		friend bool
-		operator<(const Zone_DBM &s1, const Zone_DBM &s2) {
-			if(s1.size() < s2.size()) {
-				return true;
-			} else if(s1.size() > s2.size()) {
-				return false;
-			}
-
-			for(std::size_t i = 0; i < s1.size(); i++) {
-				for(std::size_t j = 0; j < s1.size(); j++) {
-					if(s2.at(i, j) < s1.at(i,j) || s2.at(i,j) == s1.at(i,j)) {
-						return false;
-					}
-				}
-			}
-
-			return true;
-		}
-
 		/** Check two DBMs for equality.
 		 * @param s1 The first dbm
 		 * @param s2 The second dbm
@@ -745,9 +728,45 @@ namespace tacos::zones {
 				return false;
 			}
 
-			for(std::size_t i = 0; i < s1.size(); i++) {
-				for(std::size_t j = 0; j < s1.size(); j++) {
+			for(std::size_t i = 0; i < s1.size() + 1; i++) {
+				for(std::size_t j = 0; j < s1.size() + 1; j++) {
 					if(s1.at(i, j) != s2.at(i,j)) {
+						return false;
+					}
+				}
+			}
+
+			return true;
+		}
+
+		/** Check two DBMs for inequality.
+		 * @param s1 The first dbm
+		 * @param s2 The second dbm
+		 * @return true if s1 is not equal to s2
+		 */
+		friend bool
+		operator!=(const Zone_DBM &s1, const Zone_DBM &s2) {
+			return !(s1 == s2);
+		}
+
+		/** Compare two DBMs.
+		 * Not really a lot of theoretical meaning. Just for sets to be happy
+		 * 
+		 * @param s1 The first dbm
+		 * @param s2 The second dbm
+		 * @return true if s1 is smaller than s2
+		 */
+		friend bool
+		operator<(const Zone_DBM &s1, const Zone_DBM &s2) {
+			if(s1.size() < s2.size()) {
+				return true;
+			} else if(s1.size() > s2.size() || s1 == s2) {
+				return false;
+			}
+
+			for(std::size_t i = 0; i < s1.size() + 1; i++) {
+				for(std::size_t j = 0; j < s1.size() + 1; j++) {
+					if(s2.at(i, j) < s1.at(i,j)) {
 						return false;
 					}
 				}

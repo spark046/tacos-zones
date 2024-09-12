@@ -179,11 +179,22 @@ verify_ta_controller(const TimedAutomaton<LocationT, ActionType> &ta,
 }
 
 /** Print a synchronous product's location. */
-template <typename LocationT, typename ConstraintSymbolType, typename CanonicalWord>
+template <typename LocationT, typename ConstraintSymbolType>
 std::ostream &
 operator<<(std::ostream &os, const std::pair<
 	automata::ta::Location<LocationT>,
-	automata::ta::Location<std::set<CanonicalWord>>> &location)
+	automata::ta::Location<std::set<CanonicalABWord<LocationT, ConstraintSymbolType>>>> &location)
+{
+	os << "(" << location.first << ", " << location.second << ")";
+	return os;
+}
+
+/** Print a synchronous product's location. */
+template <typename LocationT, typename ConstraintSymbolType>
+std::ostream &
+operator<<(std::ostream &os, const std::pair<
+	automata::ta::Location<LocationT>,
+	automata::ta::Location<std::set<CanonicalABZoneWord<LocationT, ConstraintSymbolType>>>> &location)
 {
 	os << "(" << location.first << ", " << location.second << ")";
 	return os;
@@ -197,6 +208,13 @@ template <typename LocationT, typename ConstraintSymbolType>
 struct formatter<std::pair<
 	tacos::automata::ta::Location<LocationT>,
 	tacos::automata::ta::Location<std::set<tacos::search::CanonicalABWord<tacos::automata::ta::Location<LocationT>, ConstraintSymbolType>>>>> : ostream_formatter
+{
+};
+
+template <typename LocationT, typename ConstraintSymbolType>
+struct formatter<std::pair<
+	tacos::automata::ta::Location<LocationT>,
+	tacos::automata::ta::Location<std::set<tacos::search::CanonicalABZoneWord<tacos::automata::ta::Location<LocationT>, ConstraintSymbolType>>>>> : ostream_formatter
 {
 };
 

@@ -274,6 +274,17 @@ struct CanonicalABZoneWord {
 				s1.ata_locations == s2.ata_locations && s1.dbm == s2.dbm;
 	}
 
+	/** Check two CanonicalABZoneWords for inequality.
+	 * 
+	 * @param s1 The first word
+	 * @param s2 The second word
+	 * @return true if s1 is not equal to s2
+	 */
+	friend bool
+	operator!=(const CanonicalABZoneWord &s1, const CanonicalABZoneWord &s2) {
+		return !(s1 == s2);
+	}
+
 	friend std::ostream &
 	operator<<(std::ostream &os, const CanonicalABZoneWord &word) {
 		os << "[ {TA: " << word.ta_location << " | ";
@@ -1015,6 +1026,31 @@ operator<<(std::ostream                                                         
 		os << ab_word;
 	}
 	os << " }";
+	return os;
+}
+
+/** Print all successors of a Search Tree Node, including all CanonicalABWords. */
+template <typename LocationT, typename ActionType, typename ConstraintSymbolType = ActionType>
+std::ostream &
+operator<<(std::ostream                                                                    &os,
+           const std::map<std::pair<RegionIndex, ActionType>,
+				 std::set<CanonicalABZoneWord<LocationT, ConstraintSymbolType>>> &classes)
+{
+	if (classes.empty()) {
+		os << "{}";
+		return os;
+	}
+	os << "[ ";
+	bool first = true;
+	for (const auto &[key, set] : classes) {
+		if (!first) {
+			os << ", ";
+		} else {
+			first = false;
+		}
+		os << "( " << key.first << ", " << key.second << ") : " << set;
+	}
+	os << " ]";
 	return os;
 }
 

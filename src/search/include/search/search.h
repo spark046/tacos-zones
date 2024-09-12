@@ -924,7 +924,6 @@ class ZoneTreeSearch : public TreeSearch<Location, ActionType, ConstraintSymbolT
 		return successors;
 	}
 
-	private:
 	std::pair<std::set<Node *>, std::set<Node *>>
 	compute_children(Node *node)
 	{
@@ -950,8 +949,25 @@ class ZoneTreeSearch : public TreeSearch<Location, ActionType, ConstraintSymbolT
 			}
 		}
 
+		//If two child classes for the same action (but different time increment) share the same
+		//Plant part, then they can share the same canonical words too, since they just got split up due
+		//to different timings for the ATA
+		for(auto &[key1, set1] : child_classes) {
+			for(auto &[key2, set2] : child_classes) {
+				if(key1 == key2) {
+					continue;
+				}
+
+				if(key1.second == key2.second && reg_a(*set1.begin()) == reg_a(*set2.begin())) {
+					set1.insert(set2.begin(), set2.end());
+				}
+			}
+		}
+
 		return insert_children(child_classes, node);
 	}
 };
+
+
 
 } // namespace tacos::search

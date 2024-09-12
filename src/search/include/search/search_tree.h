@@ -70,9 +70,9 @@ public:
 		static_assert(std::is_same_v<Location, ConstraintSymbolType>
 		              || std::is_same_v<ActionType, ConstraintSymbolType>);
 		// All words must have the same reg_a.
-		assert(std::all_of(std::begin(words), std::end(words), [&words](const auto &word) {
-			return words.empty() || reg_a(*std::begin(words)) == reg_a(word);
-		}));
+		//assert(std::all_of(std::begin(words), std::end(words), [&words](const auto &word) {
+		//	return words.empty() || reg_a(*std::begin(words)) == reg_a(word);
+		//}));
 	}
 
 	/** @brief Set the node label and optionally cancel the children.

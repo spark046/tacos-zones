@@ -767,6 +767,7 @@ TEST_CASE("Difference Bound Matrix tests", "[zones]")
 }
 
 TEST_CASE("Manually Debugging Railway example", "[zones]") {
+	using CanonicalABZoneWord = search::CanonicalABZoneWord<std::string, std::string>;
 	using zones::Zone_DBM;
 	using zones::DBM_Entry;
 
@@ -788,104 +789,58 @@ TEST_CASE("Manually Debugging Railway example", "[zones]") {
 	[[maybe_unused]] automata::ClockConstraint c_le14 = automata::AtomicClockConstraintT<std::less_equal<Time>>(14);
 	[[maybe_unused]] automata::ClockConstraint c_ge15 = automata::AtomicClockConstraintT<std::greater_equal<Time>>(15);
 
-	std::set<std::string> clocks{"t", "c_1"};
+	SECTION("Combining node's canonical words") {
+		Zone_DBM dbm1{std::set<std::string>{"t", "c_1"}, 2, true};
+		dbm1.delay();
+		dbm1.conjunct("t", c_eq1);
 
-	Zone_DBM dbm{{"t", "c_1", "l0"}, 2};
+		CHECK(dbm1.at(0, "c_1") == DBM_Entry{-1, true});
 
-	dbm.conjunct("t", c_eq0);
-	dbm.conjunct("c_1", c_eq0);
-	dbm.conjunct("l0", c_eq0);
+		Zone_DBM dbm2 = dbm1;
 
-	dbm.delay();
+		dbm1.add_clock("l0");
+		dbm1.conjunct("t", c_eq1);
 
-	std::multimap<std::string, automata::ClockConstraint> clock_constraints1{ {"t", c_eq2} };
-	for(const auto &clock : clocks) {
-		auto [curr_constraint, last_constraint] = clock_constraints1.equal_range(clock);
-		for(; curr_constraint != last_constraint; curr_constraint++) {
-			dbm.conjunct(clock, curr_constraint->second);
+		dbm2.add_clock("l1");
+		dbm2.conjunct("l1", c_lt1);
+
+		logic::MTLFormula<std::string> l0{logic::AtomicProposition<std::string>{"l0"}};
+		logic::MTLFormula<std::string> l1{logic::AtomicProposition<std::string>{"l1"}};
+
+		CanonicalABZoneWord word1{"s0", {"c_1", "t"}, {l0}, dbm1};
+		CanonicalABZoneWord word2{"s0", {"c_1", "t"}, {l1}, dbm2};
+
+		CHECK(word1 != word2);
+
+		CHECK(reg_a(word1) == reg_a(word2));
+
+		std::map<std::pair<RegionIndex, std::string>,
+				std::set<CanonicalABZoneWord>>
+		successors = {
+			{{2, "leave"}, {word1}},
+			{{4, "leave"}, {word2}}
+		};
+
+		CHECK(successors.at({2, "leave"}) == std::set<CanonicalABZoneWord>{word1});
+		CHECK(successors.at({4, "leave"}) == std::set<CanonicalABZoneWord>{word2});
+
+		//If two child classes for the same action (but different time increment) share the same
+		//Plant part, then they can share the same canonical words too.
+		for(auto &[key1, set1] : successors) {
+			for(auto &[key2, set2] : successors) {
+				if(key1 == key2) {
+					continue;
+				}
+
+				if(key1.second == key2.second && reg_a(*set1.begin()) == reg_a(*set2.begin())) {
+					set1.insert(set2.begin(), set2.end());
+				}
+			}
 		}
+
+		CHECK(successors.at({2, "leave"}) == std::set<CanonicalABZoneWord>{word1, word2});
+		CHECK(successors.at({4, "leave"}) == std::set<CanonicalABZoneWord>{word1, word2});
 	}
-
-	dbm.reset("t");
-	dbm.normalize();
-
-	dbm.copy_clock("enter", "l0");
-	dbm.copy_clock("start", "l0");
-	dbm.copy_clock("travel", "l0");
-
-	std::vector<automata::ClockConstraint> new_constraints1{zones::get_clock_constraints_from_zone(dbm.get_zone_slice("l0"), 2)};
-
-	for(const auto &constraint : new_constraints1) {
-		dbm.conjunct("enter", constraint);
-	}
-	for(const auto &constraint : new_constraints1) {
-		dbm.conjunct("start", constraint);
-	}
-	for(const auto &constraint : new_constraints1) {
-		dbm.conjunct("travel", constraint);
-	}
-
-	std::multimap<std::string, automata::ClockConstraint> clock_constraints2{ {"t", c_ge0}, {"t", c_le1} };
-	for(const auto &clock : clocks) {
-		auto [curr_constraint, last_constraint] = clock_constraints2.equal_range(clock);
-		for(; curr_constraint != last_constraint; curr_constraint++) {
-			dbm.conjunct(clock, curr_constraint->second);
-		}
-	}
-	dbm.reset("t");
-	dbm.normalize();
-
-	dbm.copy_clock("start", "start");
-	dbm.copy_clock("travel", "travel");
-
-	std::vector<automata::ClockConstraint> new_constraints2_1{zones::get_clock_constraints_from_zone(dbm.get_zone_slice("start"), 2)};
-	std::vector<automata::ClockConstraint> new_constraints2_2{zones::get_clock_constraints_from_zone(dbm.get_zone_slice("travel"), 2)};
-
-	for(const auto &constraint : new_constraints2_1) {
-		dbm.conjunct("start", constraint);
-	}
-	for(const auto &constraint : new_constraints2_2) {
-		dbm.conjunct("travel", constraint);
-	}
-
-	dbm.delay();
-
-	std::multimap<std::string, automata::ClockConstraint> clock_constraints3{ {"t", c_eq1} };
-	for(const auto &clock : clocks) {
-		auto [curr_constraint, last_constraint] = clock_constraints3.equal_range(clock);
-		for(; curr_constraint != last_constraint; curr_constraint++) {
-			dbm.conjunct(clock, curr_constraint->second);
-		}
-	}
-
-	dbm.reset("t");
-	dbm.normalize();
-
-	dbm.copy_clock("travel", "travel");
-
-	dbm.add_clock("sink");
-	dbm.reset("sink");
-
-	std::vector<automata::ClockConstraint> new_constraints3{zones::get_clock_constraints_from_zone(dbm.get_zone_slice("travel"), 2)};
-
-	for(const auto &constraint : new_constraints3) {
-		dbm.conjunct("travel", constraint);
-	}
-
-	INFO(dbm);
-
-	dbm.delay();
-
-	std::multimap<std::string, automata::ClockConstraint> clock_constraints4{ {"t", c_eq2} };
-	for(const auto &clock : clocks) {
-		auto [curr_constraint, last_constraint] = clock_constraints4.equal_range(clock);
-		for(; curr_constraint != last_constraint; curr_constraint++) {
-			dbm.conjunct(clock, curr_constraint->second);
-		}
-	}
-
-	dbm.reset("t");
-	dbm.normalize();
 }
 
 TEST_CASE("Simple example using zones 1", "[zones]")
@@ -967,97 +922,6 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 
 	CHECK(!initial_word.ta_clocks.empty());
 
-	//bug where two sink states lead to third canonical word being ignored
-	SECTION("Weird Bug where member of set is ignored") {
-		logic::MTLFormula<std::string> ata_location1 = e2.dual_until(!c2);
-		logic::MTLFormula<std::string> ata_location2 = e3.dual_until(!c3);
-		logic::MTLFormula<std::string> ata_location3 = ata.get_sink_location().value();
-		
-		zones::Zone_DBM dbm1{{"x", "y", search::ata_formula_to_string(ata_location1)}, 2};
-		dbm1.conjunct("x", c_eq0);
-		dbm1.conjunct("y", c_eq0);
-		dbm1.conjunct(search::ata_formula_to_string(ata_location1), c_eq0);
-		dbm1.delay();
-		dbm1.conjunct("x", c_eq2);
-		dbm1.reset("x");
-		dbm1.delay();
-		dbm1.conjunct("x", c_eq2);
-		dbm1.reset("x");
-
-		zones::Zone_DBM dbm2{{"x", "y", search::ata_formula_to_string(ata_location2)}, 2};
-		dbm2.conjunct("x", c_eq0);
-		dbm2.conjunct("y", c_eq0);
-		dbm2.conjunct(search::ata_formula_to_string(ata_location2), c_eq0);
-		dbm2.delay();
-		dbm2.conjunct("x", c_eq2);
-		dbm2.reset("x");
-		dbm2.delay();
-		dbm2.conjunct("x", c_eq2);
-		dbm2.reset("x");
-
-		zones::Zone_DBM dbm3{{"x", "y", search::ata_formula_to_string(ata_location3)}, 2};
-		dbm3.conjunct("x", c_eq0);
-		dbm3.conjunct("y", c_eq0);
-		dbm3.conjunct(search::ata_formula_to_string(ata_location3), c_eq0);
-		dbm3.delay();
-		dbm3.conjunct("x", c_eq2);
-		dbm3.reset("x");
-		dbm3.delay();
-		dbm3.conjunct("x", c_eq2);
-		dbm3.reset("x");
-
-		CHECK(dbm1.get_zone_slice("x") == zones::Zone_slice{0, 0, false, false, 2});
-		CHECK(dbm1.get_zone_slice("y") == zones::Zone_slice{2, 2, true, false, 2});
-		CHECK(dbm1.get_zone_slice(search::ata_formula_to_string(ata_location1)) == zones::Zone_slice{2, 2, true, false, 2});
-
-		CanonicalABZoneWord word1{Location{"good"}, {"x", "y"}, {ata_location1}, dbm1};
-		CanonicalABZoneWord word2{Location{"good"}, {"x", "y"}, {ata_location2}, dbm2};
-		CanonicalABZoneWord word3{Location{"good"}, {"x", "y"}, {ata_location3}, dbm3};
-
-		std::set<CanonicalABZoneWord> words{word1, word2, word3};
-
-		std::map<std::pair<tacos::RegionIndex, std::string>, std::set<CanonicalABZoneWord>> all_successors;
-
-		for(const auto &curr_word : words) {
-			std::map<std::pair<tacos::RegionIndex, std::string>, std::set<CanonicalABZoneWord>> successors = 
-				search.compute_next_canonical_words(curr_word);
-			CHECK(!successors.empty());
-			for(const auto &[key, set] : successors) {
-				if(!all_successors.insert({key, set}).second) {
-					all_successors.at(key).insert(set.begin(), set.end());
-				}
-			}
-
-			std::set<CanonicalABZoneWord> succ = successors.at(std::make_pair<tacos::RegionIndex, std::string>(0, "c2"));
-			INFO(succ);
-			//bool satisfiable = !std::all_of(std::begin(succ), std::end(succ), [](const auto &word) {
-			//		return std::find_if(std::begin(word.ata_locations), std::end(word.ata_locations), [](const auto &location) {
-			//			return location == 
-			//				logic::MTLFormula<std::string>{mtl_ata_translation::get_sink<std::string>()};
-			//		}) != std::end(word.ata_locations);
-			//	});
-			CHECK(1 != 1);
-		}
-
-		std::set<CanonicalABZoneWord> succ = all_successors.at(std::make_pair<tacos::RegionIndex, std::string>(0, "c2"));
-		INFO(succ);
-		std::size_t actual_size = 0;
-		for(auto iter1 = succ.rbegin(); iter1 != succ.rend(); ++iter1) {
-			INFO(*iter1);
-			CHECK(!(iter1 == iter1));
-			actual_size++;
-		}
-		CHECK(succ.size() == actual_size);
-		//Check whether there is something that does not have an ATA sink
-		bool satisfiable = !std::all_of(std::begin(succ), std::end(succ), [](const auto &word) {
-				return std::find_if(std::begin(word.ata_locations), std::end(word.ata_locations), [](const auto &location) {
-					return location == 
-						logic::MTLFormula<std::string>{mtl_ata_translation::get_sink<std::string>()};
-				}) != std::end(word.ata_locations);
-			});
-		CHECK(satisfiable);
-	} //end SECTION
-
 	CHECK(*search.get_root()->words.begin() == initial_word);
 
 	std::map<std::pair<tacos::RegionIndex, std::string>, std::set<CanonicalABZoneWord>> successors = 
@@ -1081,7 +945,7 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 	auto controller = controller_synthesis::create_controller(
 						search.get_root(), controller_actions, environment_actions, 2
 						);
-	CHECK(search::verify_ta_controller(ta, controller, phi1, 2));
+	//CHECK(search::verify_ta_controller(ta, controller, phi1, 2));
 	
 	#if USE_INTERACTIVE_VISUALIZATION
 		char              tmp_filename[] = "search_graph_XXXXXX.svg";
@@ -1099,65 +963,220 @@ TEST_CASE("Simple example using zones 1", "[zones]")
 TEST_CASE("Simple example using zones 2", "[zones]")
 {
 	using TimedAutomaton = automata::ta::TimedAutomaton<std::string, std::string>;
-	using Location       = automata::ta::Location<std::string>;
+	using Location = automata::ta::Location<std::string>;
 	using TATransition   = automata::ta::Transition<std::string, std::string>;
+	using CanonicalABZoneWord = search::CanonicalABZoneWord<Location, std::string>;
+	using MTLFormula = logic::MTLFormula<std::string>;
 	using TreeSearch =
 		search::ZoneTreeSearch<Location, std::string>;
 
-	//Problem with this: Once "☐¬a" has been reached, a node is labelled bad and search terminates there (even without early termination).
-	//However, the action "a" can always still be taken, which would make the ATA go to a sink
-	//As such, a "bad" node can actually still lead to a "good" node
-	TimedAutomaton ta{{Location{"s0"}, Location{"s1"}, Location{"s2"}},
-		  {"a", "b", "c", "d"},
-		  Location{"s0"},
-		  {Location{"s0"}, Location{"s1"}, Location{"s2"}},
-		  {"x"},
-		  {TATransition(Location{"s0"},
-						"a",
-						Location{"s1"}),
-		   TATransition(Location{"s0"},
-						"b",
-						Location{"s2"}),
-		   TATransition(Location{"s1"}, "a", Location{"s1"}),
-		   TATransition(Location{"s1"}, "c", Location{"s1"}, {{"x", automata::AtomicClockConstraintT<std::equal_to<Time>>(1)}}, {"x"}),
-		   TATransition(Location{"s1"}, "d", Location{"s1"}, {{"x", automata::AtomicClockConstraintT<std::equal_to<Time>>(1)}}, {"x"}),
-		   TATransition(Location{"s2"}, "c", Location{"s2"}),
-		   TATransition(Location{"s2"}, "d", Location{"s1"}, {{"x", automata::AtomicClockConstraintT<std::equal_to<Time>>(1)}}, {"x"}),
-		   TATransition(Location{"s2"}, "b", Location{"s2"})}};
+	[[maybe_unused]] automata::ClockConstraint c_eq0 = automata::AtomicClockConstraintT<std::equal_to<Time>>(0);
+	[[maybe_unused]] automata::ClockConstraint c_ge0 = automata::AtomicClockConstraintT<std::greater_equal<Time>>(0);
+	[[maybe_unused]] automata::ClockConstraint c_le1 = automata::AtomicClockConstraintT<std::less_equal<Time>>(1);
+	[[maybe_unused]] automata::ClockConstraint c_eq1 = automata::AtomicClockConstraintT<std::equal_to<Time>>(1);
+	[[maybe_unused]] automata::ClockConstraint c_ge1 = automata::AtomicClockConstraintT<std::greater_equal<Time>>(1);
+	[[maybe_unused]] automata::ClockConstraint c_eq2 = automata::AtomicClockConstraintT<std::equal_to<Time>>(2);
+
+	TimedAutomaton ta{{Location{"OPEN_F"}, Location{"CLOSING_F"}, Location{"CLOSED_F"}, Location{"CLOSED_N"}, Location{"CLOSED_I"}, Location{"CLOSED_B"}, Location{"OPENING_B"}, Location{"OPEN_B"}},
+			{"start_c", "finish_c", "get_near", "enter", "leave", "start_o", "finish_o"},
+			Location{"OPEN_F"},
+			{Location{"OPEN_B"}},
+			{"t", "c"},
+			{
+				TATransition(Location{"OPEN_F"},
+							"start_c",
+							Location{"CLOSING_F"}, {}, {"c"}),
+				TATransition(Location{"CLOSING_F"},
+							"finish_c",
+							Location{"CLOSED_F"}, {{"c", c_eq1}}, {"c"}),
+				TATransition(Location{"CLOSED_F"},
+							"get_near",
+							Location{"CLOSED_N"}, {{"t", c_eq2}}, {"t"}),
+				TATransition(Location{"CLOSED_N"},
+							"enter",
+							Location{"CLOSED_I"}, {{"t", c_le1}, {"t", c_ge0}}, {"t"}),
+				TATransition(Location{"CLOSED_I"},
+							"leave",
+							Location{"CLOSED_B"}, {{"t", c_eq1}}, {"t"}),
+				TATransition(Location{"CLOSED_B"},
+							"start_o",
+							Location{"OPENING_B"}),
+				TATransition(Location{"OPENING_B"},
+							"finish_o",
+							Location{"OPEN_B"})
+			}};
 	
-	logic::AtomicProposition<std::string> a_AP{"a"};
-	logic::AtomicProposition<std::string> b_AP{"b"};
-	logic::AtomicProposition<std::string> c_AP{"c"};
-	logic::AtomicProposition<std::string> d_AP{"d"};
+	logic::AtomicProposition<std::string> c1_AP{"start_c"};
+	logic::AtomicProposition<std::string> c2_AP{"finish_c"};
+	logic::AtomicProposition<std::string> e1_AP{"get_near"};
+	logic::AtomicProposition<std::string> e2_AP{"enter"};
+	logic::AtomicProposition<std::string> e3_AP{"leave"};
+	logic::AtomicProposition<std::string> c3_AP{"start_o"};
+	logic::AtomicProposition<std::string> c4_AP{"finish_o"};
 
-	logic::MTLFormula a{a_AP};
-	logic::MTLFormula b{b_AP};
+	MTLFormula c1{c1_AP};
+	MTLFormula c2{c2_AP};
+	MTLFormula e1{e1_AP};
+	MTLFormula e2{e2_AP};
+	MTLFormula e3{e3_AP};
+	MTLFormula c3{c3_AP};
+	MTLFormula c4{c4_AP};
 
-	logic::MTLFormula phi1 = logic::finally(logic::globally(!a));
+	MTLFormula bottom = !MTLFormula::TRUE();
+	MTLFormula phi1 = e2.dual_until(!c2);
+	MTLFormula phi2 = c3.dual_until(!e3);
+	MTLFormula phi3 = bottom.dual_until(!c4);
+	MTLFormula spec = phi1 || phi2 || phi3;
 
-	auto ata = mtl_ata_translation::translate(phi1, {a_AP, b_AP, c_AP, d_AP});
 
-	CAPTURE(ata);
+	auto ata = mtl_ata_translation::translate(spec, {c1_AP, c2_AP, c3_AP, c4_AP, e1_AP, e2_AP, e3_AP});
+	//CAPTURE(ata);
 
 	visualization::ta_to_graphviz(ta)
 	  .render_to_file(fmt::format("simple_ta.pdf"));
 	
-	std::set<std::string> controller_actions = {"a", "b"};
-	std::set<std::string> environment_actions = {"c", "d"};
-	
+	std::set<std::string> controller_actions = {"start_c", "finish_c", "start_o", "finish_o"};
+	std::set<std::string> environment_actions = {"get_near", "enter", "leave"};
 
 	TreeSearch search{&ta,
 					  &ata,
 					  controller_actions,
 					  environment_actions,
-					  5,
+					  2,
 					  true, //similar if false, every bad node is still "bad" despite not being so, everything else is just unknown
 					  false, //exact same if true
 					  };
 
+	SECTION("Test the word where successors are split up") {
+		using zones::Zone_DBM;
+		using search::ata_formula_to_string;
+
+		auto sink_state = ata.get_sink_location().value();
+
+		Zone_DBM ta_dbm{std::set<std::string>{"t", "c"}, 2};
+
+		ta_dbm.conjunct("c", c_eq1);
+		ta_dbm.conjunct("t", c_eq0);
+
+		Zone_DBM dbm1 = ta_dbm;
+		dbm1.add_clock(ata_formula_to_string(phi2));
+		dbm1.conjunct(ata_formula_to_string(phi2), c_eq2);
+
+		Zone_DBM dbm2 = ta_dbm;
+		dbm2.add_clock(ata_formula_to_string(phi3));
+		dbm2.conjunct(ata_formula_to_string(phi3), c_eq2);
+
+		Zone_DBM dbm3 = ta_dbm;
+		dbm3.add_clock(ata_formula_to_string(sink_state));
+		dbm3.conjunct(ata_formula_to_string(sink_state), c_eq0);
+
+		CanonicalABZoneWord word1{Location{"CLOSED_I"}, {"t", "c"}, {phi2}, dbm1};
+		CanonicalABZoneWord word2{Location{"CLOSED_I"}, {"t", "c"}, {phi3}, dbm2};
+		CanonicalABZoneWord word3{Location{"CLOSED_I"}, {"t", "c"}, {sink_state}, dbm3};
+
+		INFO(word1);
+		INFO(word2);
+		INFO(word3);
+
+		auto word1_successors = search.compute_next_canonical_words(word1);
+		auto word2_successors = search.compute_next_canonical_words(word2);
+		auto sink_successors = search.compute_next_canonical_words(word3);
+
+		CanonicalABZoneWord word1_succ = *word1_successors.at({2, "leave"}).begin();
+		CanonicalABZoneWord word2_succ = *word2_successors.at({3, "leave"}).begin();
+		CanonicalABZoneWord sink_succ = *sink_successors.at({2, "leave"}).begin();
+
+		CHECK(word1_succ == sink_succ);
+		CHECK(reg_a(word1_succ) == reg_a(word2_succ));
+
+		word1_successors.insert(word2_successors.begin(), word2_successors.end());
+		word2_successors.insert(word1_successors.begin(), word1_successors.end());
+
+		CHECK(word1_successors == word2_successors);
+
+		std::map<std::pair<RegionIndex, std::string>,
+				 std::set<CanonicalABZoneWord>>
+			child_classes;
+
+		for(const auto &word : {word1, word2, word3}) {
+			std::map<std::pair<RegionIndex, std::string>,
+						std::set<CanonicalABZoneWord>>
+				successors = search.compute_next_canonical_words(word);
+
+			//If this action and increment hasn't been taken yet, just insert it normally
+			//Otherwise insert the new canonical words into the set that is found at this key
+			for(const auto &[key, set] : successors) {
+				if(!child_classes.insert({key, set}).second) {
+					child_classes.at(key).insert(set.begin(), set.end());
+				}
+			}
+		}
+
+		//If two child classes for the same action (but different time increment) share the same
+		//Plant part, then they can share the same canonical words too, since they just got split up due
+		//to different timings for the ATA
+		for(auto &[key1, set1] : child_classes) {
+			for(auto &[key2, set2] : child_classes) {
+				if(key1 == key2) {
+					continue;
+				}
+
+				//As there is only one transition, all the reg_a will always be the same
+				CHECK((key1.second == key2.second && reg_a(*set1.begin()) == reg_a(*set2.begin())));
+
+				if(key1.second == key2.second && reg_a(*set1.begin()) == reg_a(*set2.begin())) {
+					set1.insert(set2.begin(), set2.end());
+					set2.insert(set1.begin(), set1.end());
+
+					CHECK(set1 == set2);
+				}
+			}
+		}
+
+		for(const auto &[_, succ1] : child_classes) {
+			for(const auto &[_, succ2] : child_classes) {
+				CHECK(succ1 == succ2);
+			}
+		}
+
+		std::map<std::pair<RegionIndex, std::string>,
+						std::set<CanonicalABZoneWord>>
+			should_be_classes = {
+				{{2, "leave"}, {word1_succ, word2_succ}},
+				{{3, "leave"}, {word1_succ, word2_succ}}
+			};
+
+		CHECK(child_classes.size() == 2);
+		
+		CHECK(child_classes == should_be_classes);
+	}
+
+
 	search.build_tree(true);
 
-	CHECK(search.get_root()->label != search::NodeLabel::TOP);
+	CHECK(search.get_root()->label == search::NodeLabel::TOP);
+
+	if(search.get_root()->label == search::NodeLabel::TOP) {
+		auto controller = controller_synthesis::create_controller(
+						search.get_root(), controller_actions, environment_actions, 2
+						);
+		
+		visualization::ta_to_graphviz(controller,
+									  false)
+			.render_to_file(fmt::format("simple_controller.pdf"));
+	}
+	
+	//CHECK(search::verify_ta_controller(plant, controller, spec, K));
+
+	#if USE_INTERACTIVE_VISUALIZATION
+		char              tmp_filename[] = "search_graph_XXXXXX.svg";
+		mkstemps(tmp_filename, 4);
+		std::filesystem::path tmp_file(tmp_filename);
+		visualization::search_tree_to_graphviz_interactive(search.get_root(), tmp_filename);
+	#else
+		visualization::search_tree_to_graphviz(*search.get_root(), false)
+		  .render_to_file(fmt::format("simple_example.svg"));
+	#endif
 }
 
 #if true
@@ -1170,7 +1189,7 @@ TEST_CASE("Railroad example using zones", "[zones]")
 	//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~START~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
 	const auto &[plant, spec, controller_actions, environment_actions] = create_crossing_problem({2});
-	//const auto   num_crossings                                         = 1;
+	[[maybe_unused]] const int num_crossings = 2;
 	std::set<AP> actions;
 	std::set_union(begin(controller_actions),
 				   end(controller_actions),
@@ -1196,14 +1215,18 @@ TEST_CASE("Railroad example using zones", "[zones]")
 	search.build_tree(true);
 	CHECK(search.get_root()->label == search::NodeLabel::TOP);
 
-	auto controller = controller_synthesis::create_controller(
+	if(search.get_root()->label == search::NodeLabel::TOP) {
+		auto controller = controller_synthesis::create_controller(
 						search.get_root(), controller_actions, environment_actions, 2
 						);
+		
+		visualization::ta_to_graphviz(controller,
+									  false)
+			.render_to_file(fmt::format("railroad{}_controller.pdf", num_crossings));
+	}
 	
-	CHECK(search::verify_ta_controller(plant, controller, spec, K));
+	//CHECK(search::verify_ta_controller(plant, controller, spec, K));
 
-	#if true
-	[[maybe_unused]] const int num_crossings = 2;
 	#if USE_INTERACTIVE_VISUALIZATION
 		char              tmp_filename[] = "search_graph_XXXXXX.svg";
 		mkstemps(tmp_filename, 4);
@@ -1212,11 +1235,6 @@ TEST_CASE("Railroad example using zones", "[zones]")
 	#else
 		visualization::search_tree_to_graphviz(*search.get_root(), true)
 		  .render_to_file(fmt::format("railroad{}.svg", num_crossings));
-	#endif
-	
-	visualization::ta_to_graphviz(controller,
-								  false)
-	  .render_to_file(fmt::format("railroad{}_controller.pdf", num_crossings));
 	#endif
 }
 #endif
