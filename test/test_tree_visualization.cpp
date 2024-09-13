@@ -25,7 +25,7 @@ using namespace tacos;
 using ATARegionState  = search::ATARegionState<std::string>;
 using CanonicalABWord = search::CanonicalABWord<std::string, std::string>;
 using Location        = automata::ta::Location<std::string>;
-using Node            = search::SearchTreeNode<std::string, std::string>;
+using Node            = search::SearchTreeNode<CanonicalABWord, std::string, std::string>;
 using TARegionState   = search::PlantRegionState<std::string>;
 
 using search::LabelReason;
@@ -49,7 +49,7 @@ create_test_graph()
 	  };
 	const logic::MTLFormula            a{logic::AtomicProposition<std::string>{"a"}};
 	const logic::MTLFormula            b{logic::AtomicProposition<std::string>{"b"}};
-	std::vector<std::shared_ptr<Node>> children;
+	//std::vector<std::shared_ptr<Node>> children;
 	auto                               n1c1 = create_test_node(
     {{{TARegionState{Location{"l0"}, "x", 0}}, {TARegionState{Location{"l0"}, "y", 2}}}});
 	auto n1 = create_test_node({{{TARegionState{Location{"l0"}, "x", 0}},

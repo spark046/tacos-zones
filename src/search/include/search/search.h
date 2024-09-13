@@ -558,7 +558,6 @@ class RegionTreeSearch : public TreeSearch<Location, ActionType, ConstraintSymbo
 	 * @param incremental_labeling True, if incremental labeling should be used (default=false)
 	 * @param terminate_early If true, cancel the children of a node that has already been labeled
 	 * @param search_heuristic The heuristic to use during tree expansion
-	 * @param use_zones Whether to use zones, otherwise regions are used
 	 */
 	RegionTreeSearch(
 		const Plant                           *ta,
@@ -568,8 +567,10 @@ class RegionTreeSearch : public TreeSearch<Location, ActionType, ConstraintSymbo
 		std::set<ActionType>                   environment_actions,
 		RegionIndex                            K,
 		bool                                   incremental_labeling = false,
-		bool                                   terminate_early      = false)
-	: Base(ta, ata, controller_actions, environment_actions, K, incremental_labeling, terminate_early)
+		bool                                   terminate_early      = false,
+		std::unique_ptr<Heuristic<long, Node>> search_heuristic =
+			std::make_unique<BfsHeuristic<long, Node>>())
+	: Base(ta, ata, controller_actions, environment_actions, K, incremental_labeling, terminate_early, std::move(search_heuristic))
 	{
 		if constexpr (use_location_constraints && use_set_semantics) {
 			// Already read a single empty symbol to skip l0.

@@ -58,7 +58,7 @@ namespace {
 
 using namespace tacos;
 
-using TreeSearch      = search::TreeSearch<automata::ta::Location<std::string>, std::string>;
+using TreeSearch      = search::RegionTreeSearch<automata::ta::Location<std::string>, std::string>;
 using TATransition    = automata::ta::Transition<std::string, std::string>;
 using TA              = automata::ta::TimedAutomaton<std::string, std::string>;
 using TAConfiguration = automata::ta::TAConfiguration<std::string>;
@@ -72,7 +72,7 @@ using search::NodeState;
 using AP = logic::AtomicProposition<std::string>;
 using ::utilities::arithmetic::BoundType;
 using Location = automata::ta::Location<std::string>;
-using Node     = search::SearchTreeNode<automata::ta::Location<std::string>, std::string>;
+using Node     = search::SearchTreeNode<CanonicalABWord, automata::ta::Location<std::string>, std::string>;
 
 template <typename Key, typename Val>
 std::set<Key>

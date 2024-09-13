@@ -779,7 +779,7 @@ TEST_CASE("monotone_domination_order_sets", "[canonical_word]")
 TEST_CASE("Monotonic domination on nodes", "[canonical_word]")
 {
 	using Node =
-	  search::SearchTreeNode<automata::ta::Location<std::string>, std::string, std::string>;
+	  search::SearchTreeNode<CanonicalABWord, automata::ta::Location<std::string>, std::string, std::string>;
 	auto n1 =
 	  std::make_shared<Node>(std::set{CanonicalABWord({{TARegionState{Location{"s0"}, "c0", 0}}})});
 	auto n2 =

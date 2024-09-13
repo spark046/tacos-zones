@@ -51,11 +51,13 @@ namespace tacos::app {
 namespace {
 std::unique_ptr<search::Heuristic<
   long,
-  search::SearchTreeNode<automata::ta::Location<std::vector<std::string>>, std::string>>>
+  search::SearchTreeNode<search::CanonicalABWord<automata::ta::Location<std::vector<std::string>>, std::string>
+						,automata::ta::Location<std::vector<std::string>>, std::string>>>
 create_heuristic(const std::string &name, const std::set<std::string> environment_actions = {})
 {
+	using CanonicalABWord = search::CanonicalABWord<automata::ta::Location<std::vector<std::string>>, std::string>;
 	using NodeT =
-	  search::SearchTreeNode<automata::ta::Location<std::vector<std::string>>, std::string>;
+	  search::SearchTreeNode<CanonicalABWord, automata::ta::Location<std::vector<std::string>>, std::string>;
 	if (name == "time") {
 		return std::make_unique<search::TimeHeuristic<long, NodeT>>();
 	} else if (name == "bfs") {
@@ -196,7 +198,7 @@ Launcher::run()
 	SPDLOG_INFO("Environment actions: {}", fmt::join(environment_actions, ", "));
 	SPDLOG_INFO("Initializing search");
 	const auto         K = std::max(plant.get_largest_constant(), spec.get_largest_constant());
-	search::TreeSearch search(&plant,
+	search::RegionTreeSearch search(&plant,
 	                          &ata,
 	                          controller_actions,
 	                          environment_actions,

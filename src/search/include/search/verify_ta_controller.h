@@ -170,7 +170,9 @@ verify_ta_controller(const TimedAutomaton<LocationT, ActionType> &ta,
 		&ata,
 		{},
 		actions,
-		K
+		K,
+		true,
+		true
 	};
 
 	search.build_tree(true);
@@ -182,7 +184,7 @@ verify_ta_controller(const TimedAutomaton<LocationT, ActionType> &ta,
 template <typename LocationT, typename ConstraintSymbolType>
 std::ostream &
 operator<<(std::ostream &os, const std::pair<
-	automata::ta::Location<LocationT>,
+	LocationT,
 	automata::ta::Location<std::set<CanonicalABWord<LocationT, ConstraintSymbolType>>>> &location)
 {
 	os << "(" << location.first << ", " << location.second << ")";
@@ -193,7 +195,7 @@ operator<<(std::ostream &os, const std::pair<
 template <typename LocationT, typename ConstraintSymbolType>
 std::ostream &
 operator<<(std::ostream &os, const std::pair<
-	automata::ta::Location<LocationT>,
+	LocationT,
 	automata::ta::Location<std::set<CanonicalABZoneWord<LocationT, ConstraintSymbolType>>>> &location)
 {
 	os << "(" << location.first << ", " << location.second << ")";

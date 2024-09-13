@@ -142,12 +142,12 @@ is_monotonically_dominated(const std::set<CanonicalABZoneWord<LocationT, Constra
  * been seen, the check is aborted.
  * @return true if the given node or one of its ancestors is monotonically dominated
  */
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename CanonicalWord>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
 bool
 ancestor_is_monotonically_dominated(
-  const SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> &               node,
+  const SearchTreeNode<CanonicalABWord<LocationT, ConstraintSymbolT>, LocationT, ActionT, ConstraintSymbolT> &               node,
   const std::set<CanonicalABWord<LocationT, ConstraintSymbolT>> &             words,
-  std::vector<const SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> *> &seen_nodes)
+  std::vector<const SearchTreeNode<CanonicalABWord<LocationT, ConstraintSymbolT>, LocationT, ActionT, ConstraintSymbolT> *> &seen_nodes)
 {
 	if (std::find(std::begin(seen_nodes), std::end(seen_nodes), &node) != std::end(seen_nodes)) {
 		return false;
@@ -176,12 +176,12 @@ ancestor_is_monotonically_dominated(
  * been seen, the check is aborted.
  * @return true if the given node or one of its ancestors is monotonically dominated
  */
-template <typename LocationT, typename ActionT, typename ConstraintSymbolT, typename CanonicalWord>
+template <typename LocationT, typename ActionT, typename ConstraintSymbolT>
 bool
 ancestor_is_monotonically_dominated(
-  const SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> &               node,
+  const SearchTreeNode<CanonicalABZoneWord<LocationT, ConstraintSymbolT>, LocationT, ActionT, ConstraintSymbolT> &               node,
   const std::set<CanonicalABZoneWord<LocationT, ConstraintSymbolT>> &             words,
-  std::vector<const SearchTreeNode<CanonicalWord, LocationT, ActionT, ConstraintSymbolT> *> &seen_nodes)
+  std::vector<const SearchTreeNode<CanonicalABZoneWord<LocationT, ConstraintSymbolT>, LocationT, ActionT, ConstraintSymbolT> *> &seen_nodes)
 {
 	if (std::find(std::begin(seen_nodes), std::end(seen_nodes), &node) != std::end(seen_nodes)) {
 		return false;

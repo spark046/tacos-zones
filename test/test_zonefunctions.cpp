@@ -1223,9 +1223,9 @@ TEST_CASE("Railroad example using zones", "[zones]")
 		visualization::ta_to_graphviz(controller,
 									  false)
 			.render_to_file(fmt::format("railroad{}_controller.pdf", num_crossings));
+		CHECK(search::verify_ta_controller(plant, controller, spec, K));
 	}
 	
-	//CHECK(search::verify_ta_controller(plant, controller, spec, K));
 
 	#if USE_INTERACTIVE_VISUALIZATION
 		char              tmp_filename[] = "search_graph_XXXXXX.svg";

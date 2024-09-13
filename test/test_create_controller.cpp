@@ -67,7 +67,7 @@ TEST_CASE("Create a simple controller", "[.][controller]")
 	CAPTURE(ta);
 	CAPTURE(spec);
 	CAPTURE(ata);
-	search::TreeSearch<TA::Location, std::string> search(&ta, &ata, {"c"}, {"e"}, 1, true, false);
+	search::RegionTreeSearch<TA::Location, std::string> search(&ta, &ata, {"c"}, {"e"}, 1, true, false);
 	search.build_tree();
 	// search.label();
 #ifdef HAVE_VISUALIZATION
@@ -112,7 +112,7 @@ TEST_CASE("Controller time bounds", "[.railroad][controller]")
 	auto ata = mtl_ata_translation::translate(
 	  ((!finish_close).until(enter) && finally(enter)),
 	  {AP{"start_open"}, AP{"finish_open"}, AP{"start_close"}, AP{"finish_close"}});
-	search::TreeSearch<TA::Location, std::string> search(
+	search::RegionTreeSearch<TA::Location, std::string> search(
 	  &ta, &ata, {"start_open", "start_close"}, {"finish_open", "finish_close"}, 4, true, true);
 
 	search.build_tree();
@@ -147,7 +147,7 @@ TEST_CASE("Controller cannot decide to do nothing", "[controller]")
 	auto ata = mtl_ata_translation::translate(logic::finally(logic::MTLFormula{ap_e}), {ap_c, ap_e});
 	CAPTURE(ta);
 	CAPTURE(ata);
-	search::TreeSearch<TA::Location, std::string> search(&ta, &ata, {"c"}, {"e"}, 0, true, false);
+	search::RegionTreeSearch<TA::Location, std::string> search(&ta, &ata, {"c"}, {"e"}, 0, true, false);
 	search.build_tree(false);
 	INFO("Tree:\n" << search::node_to_string(*search.get_root(), true));
 	CHECK(search.get_root()->label == NodeLabel::BOTTOM);

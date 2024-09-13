@@ -53,7 +53,7 @@ using F          = logic::MTLFormula<std::string>;
 using AP         = logic::AtomicProposition<std::string>;
 using search::NodeLabel;
 using TreeSearch =
-  search::TreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
+  search::RegionTreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
 
 TEST_CASE("Railroad", "[railroad]")
 {
@@ -70,7 +70,7 @@ TEST_CASE("Railroad", "[railroad]")
 	CAPTURE(plant);
 	CAPTURE(ata);
 	const unsigned int K = std::max(plant.get_largest_constant(), spec.get_largest_constant());
-	TreeSearch         search{&plant,
+	TreeSearch      search{&plant,
                     &ata,
                     controller_actions,
                     environment_actions,

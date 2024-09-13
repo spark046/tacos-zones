@@ -34,7 +34,7 @@ using F          = logic::MTLFormula<std::string>;
 using AP         = logic::AtomicProposition<std::string>;
 using search::NodeLabel;
 using TreeSearch =
-  search::TreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
+  search::RegionTreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
 
 TEST_CASE("Two processes", "[.large][fisher]")
 {
