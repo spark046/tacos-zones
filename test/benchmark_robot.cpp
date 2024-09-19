@@ -20,7 +20,7 @@
 
 using namespace tacos;
 
-using Search = search::TreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
+using Search = search::RegionTreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
 using TA     = automata::ta::TimedAutomaton<std::string, std::string>;
 using MTLFormula = logic::MTLFormula<std::string>;
 using AP         = logic::AtomicProposition<std::string>;

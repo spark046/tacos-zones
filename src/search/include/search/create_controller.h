@@ -95,7 +95,6 @@ get_constraints_from_outgoing_action(
 				if (first_good_increment == increment) {
 					// They are the same, create both constraints at the same time to obtain a = constraint
 					// for even regions. constraints.merge(
-					//TODO: get_nth_time_successor should get n sets of clock constraints to simulate taking n steps (so Zone Delays can be restricted)
 					constraints.merge(get_constraints_from_time_successor(
 					  search::get_nth_time_successor(node_reg_a, *first_good_increment, K),
 					  K,
@@ -127,6 +126,7 @@ get_constraints_from_outgoing_action(
  * @param canonical_words The canonical words of the node.
  * @param actions The outgoing actions of the node as set of pairs (region increment, action name)
  * @param K The value of the maximal constant occurring anywhere in the input problem
+ * @param constraints Clock constraints that are imposed by taking the timed action
  * @return A multimap, where each entry is a pair (a, c), where c is a multimap of clock constraints
  * necessary when taking action a.
  */
@@ -137,47 +137,31 @@ get_constraints_from_outgoing_action(
   const std::pair<RegionIndex, ActionT> &                                   timed_action,
   RegionIndex                                                               K)
 {
-	std::map<ActionT, std::set<RegionIndex>> good_actions;
-	// TODO merging of the constraints is broken because we now get only a single action.
-	good_actions[timed_action.second].insert(timed_action.first);
-
 	// We only need the reg_a of the words. As we know that they are all the same, we can just take
 	// the first one.
 	assert(reg_a(*std::begin(canonical_words)) == reg_a(*std::rbegin(canonical_words)));
-	const auto node_reg_a_zone = reg_a(*std::begin(canonical_words));
-	search::CanonicalABWord<LocationT, ConstraintSymbolT> node_reg_a = node_reg_a_zone;
+	const search::CanonicalABZoneWord<LocationT, ConstraintSymbolT> node_reg_a = reg_a(*std::begin(canonical_words));
 
 	std::multimap<ActionT, std::multimap<std::string, automata::ClockConstraint>> res;
-	for (const auto &[action, increments] : good_actions) {
-		assert(!increments.empty());
+	std::multimap<std::string, automata::ClockConstraint> constraints;
+	
+	zones::Zone_DBM successor_dbm = node_reg_a.dbm;
 
-		auto first_good_increment = std::begin(increments);
-		for (auto increment = std::begin(increments); increment != std::end(increments); ++increment) {
-			if (std::next(increment) == std::end(increments) || *std::next(increment) > *increment + 1) {
-				std::multimap<std::string, automata::ClockConstraint> constraints;
-				if (first_good_increment == increment) {
-					// They are the same, create both constraints at the same time to obtain a = constraint
-					// for even regions. constraints.merge(
-					//TODO: get_nth_time_successor should get n sets of clock constraints to simulate taking n steps (so Zone Delays can be restricted)
-					constraints.merge(get_constraints_from_time_successor(
-					  search::get_nth_time_successor(node_reg_a, *first_good_increment, K),
-					  K,
-					  automata::ta::ConstraintBoundType::BOTH));
-				} else {
-					constraints.merge(get_constraints_from_time_successor(
-					  search::get_nth_time_successor(node_reg_a, *first_good_increment, K),
-					  K,
-					  automata::ta::ConstraintBoundType::LOWER));
-					constraints.merge(get_constraints_from_time_successor(
-					  search::get_nth_time_successor(node_reg_a, *increment, K),
-					  K,
-					  automata::ta::ConstraintBoundType::UPPER));
-				}
-				res.insert(std::make_pair(action, constraints));
-				first_good_increment = std::next(increment);
-			}
+	if(timed_action.first > 0) {
+		successor_dbm.delay();
+	}
+
+	for(const auto &clock : successor_dbm.get_clocks()) {
+		auto zone_constraints = zones::get_clock_constraints_from_zone(successor_dbm.get_zone_slice(clock), K);
+		for(const auto &zone_constraint : zone_constraints) {
+			constraints.insert({clock,
+								zone_constraint
+							});
 		}
 	}
+
+	res.insert(std::make_pair(timed_action.second, constraints));
+
 	return res;
 }
 

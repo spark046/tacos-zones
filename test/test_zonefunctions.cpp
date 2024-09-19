@@ -6,6 +6,7 @@
 
 #include "search/search.h"
 #include "search/verify_ta_controller.h"
+#include "search/ta_adapter.h"
 
 
 //TODO: Figure out what is actually necessary, currently just copied from test_railroad.cpp

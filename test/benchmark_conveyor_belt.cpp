@@ -31,7 +31,7 @@ using TA         = automata::ta::TimedAutomaton<std::string, std::string>;
 using Transition = automata::ta::Transition<std::string, std::string>;
 using F          = logic::MTLFormula<std::string>;
 using AP         = logic::AtomicProposition<std::string>;
-using TreeSearch = search::TreeSearch<automata::ta::Location<std::string>, std::string>;
+using TreeSearch = search::RegionTreeSearch<automata::ta::Location<std::string>, std::string>;
 
 static void
 BM_ConveyorBelt(benchmark::State &state, bool weighted = true, bool multi_threaded = true)

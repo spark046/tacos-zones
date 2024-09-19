@@ -15,6 +15,7 @@
 #include "search/heuristics.h"
 #include "search/search.h"
 #include "search/ta_adapter.h"
+#include "search/verify_ta_controller.h"
 
 #include "automata/ta.h"
 #include "automata/ta_regions.h"
@@ -39,7 +40,7 @@ enum class Mode {
 
 using namespace tacos;
 
-using Search = search::TreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
+using Search = search::ZoneTreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
 using TA     = automata::ta::TimedAutomaton<std::string, std::string>;
 using MTLFormula = logic::MTLFormula<std::string>;
 using AP         = logic::AtomicProposition<std::string>;
@@ -49,9 +50,9 @@ using Location   = automata::ta::Location<std::string>;
 using TA         = automata::ta::TimedAutomaton<std::string, std::string>;
 using Transition = automata::ta::Transition<std::string, std::string>;
 using F          = logic::MTLFormula<std::string>;
-using TreeSearch = search::TreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
+using TreeSearch = search::ZoneTreeSearch<automata::ta::Location<std::vector<std::string>>, std::string>;
 
-using CBTreeSearch = search::TreeSearch<automata::ta::Location<std::string>, std::string>;
+using CBTreeSearch = search::ZoneTreeSearch<automata::ta::Location<std::string>, std::string>;
 
 static void
 BM_Robot_zone(benchmark::State &state, bool weighted = true, bool multi_threaded = true)
@@ -163,7 +164,7 @@ BM_Robot_zone(benchmark::State &state, bool weighted = true, bool multi_threaded
 			}
 		}
 		Search search(
-		  &product, &ata, camera_actions, robot_actions, K, true, true, std::move(heuristic), true);
+		  &product, &ata, camera_actions, robot_actions, K, true, true, std::move(heuristic));
 		search.build_tree(multi_threaded);
 		search.label();
 		tree_size += search.get_size();
@@ -178,6 +179,8 @@ BM_Robot_zone(benchmark::State &state, bool weighted = true, bool multi_threaded
 		plant_size += product.get_locations().size();
 		auto controller =
 		  controller_synthesis::create_controller(search.get_root(), camera_actions, robot_actions, K);
+
+		assert(tacos::search::verify_ta_controller(product, controller, spec, K));
 		controller_size += controller.get_locations().size();
 	}
 	state.counters["tree_size"] =
@@ -287,7 +290,7 @@ BM_Railroad_zone(benchmark::State &state, Mode mode, bool multi_threaded = true)
 			break;
 		}
 		TreeSearch search{
-		  &plant, &ata, controller_actions, environment_actions, K, true, true, std::move(heuristic), true};
+		  &plant, &ata, controller_actions, environment_actions, K, true, true, std::move(heuristic)};
 
 		search.build_tree(multi_threaded);
 		search.label();
@@ -445,8 +448,7 @@ BM_ConveyorBelt_zone(benchmark::State &state, bool weighted = true, bool multi_t
 		                  K,
 		                  true,
 		                  true,
-		                  generate_heuristic<CBTreeSearch::Node>(),
-                          true};
+		                  generate_heuristic<CBTreeSearch::Node>()};
 		search.build_tree(multi_threaded);
 		search.label();
 		auto controller = controller_synthesis::create_controller(search.get_root(),

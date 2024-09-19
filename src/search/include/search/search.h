@@ -694,8 +694,10 @@ class ZoneTreeSearch : public TreeSearch<Location, ActionType, ConstraintSymbolT
 		std::set<ActionType>                   environment_actions,
 		RegionIndex                            K,
 		bool                                   incremental_labeling = false,
-		bool                                   terminate_early      = false)
-	: Base(ta, ata, controller_actions, environment_actions, K, incremental_labeling, terminate_early)
+		bool                                   terminate_early      = false,
+		std::unique_ptr<Heuristic<long, Node>> search_heuristic =
+			std::make_unique<BfsHeuristic<long, Node>>())
+	: Base(ta, ata, controller_actions, environment_actions, K, incremental_labeling, terminate_early, std::move(search_heuristic))
 	{
 		if constexpr (use_location_constraints && use_set_semantics) {
 			//TODO: Add zone support for location constraints and set semantics

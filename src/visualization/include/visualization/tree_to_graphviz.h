@@ -63,8 +63,6 @@ get_word_labelling(const search::CanonicalABWord<LocationT, ConstraintSymbolT> &
 		word_labels.push_back(fmt::format("{}", fmt::join(partition_labels, ", ")));
 	}
 
-	program_label += " REGION";
-
 	return std::make_pair(program_label, word_labels);
 }
 
@@ -92,8 +90,6 @@ get_word_labelling(const search::CanonicalABZoneWord<LocationT, ConstraintSymbol
 		word_labels.push_back(
 				fmt::format("({}, {})", clock, word.dbm.get_zone_slice(clock)));
 	}
-
-	program_label += " ZONE";
 
 	return std::make_pair(program_label, word_labels);
 }
