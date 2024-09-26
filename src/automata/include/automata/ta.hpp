@@ -159,10 +159,10 @@ TimedAutomaton<LocationT, AP>::add_transition(const Transition &transition)
 		throw InvalidSymbolException(transition.symbol_);
 	}
 	if (!locations_.count(transition.source_)) {
-		throw InvalidLocationException(transition.source_);
+		throw InvalidLocationException(transition.source_, "source");
 	}
 	if (!locations_.count(transition.target_)) {
-		throw InvalidLocationException(transition.target_);
+		throw InvalidLocationException(transition.target_, "target");
 	}
 	for (const auto &[clock_name, constraint] : transition.clock_constraints_) {
 		if (!clocks_.count(clock_name)) {

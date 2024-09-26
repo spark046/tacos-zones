@@ -49,8 +49,8 @@ class InvalidLocationException : public std::invalid_argument
 public:
 	/** Constructor
 	 */
-	explicit InvalidLocationException(const automata::ta::Location<LocationT> &)
-	: std::invalid_argument("Invalid location")
+	explicit InvalidLocationException(const automata::ta::Location<LocationT> &, std::string msg)
+	: std::invalid_argument(fmt::format("Invalid location {}", msg))
 	{
 	}
 };
