@@ -17,6 +17,8 @@ option(TACOS_CLANG_TIDY "Run clang-tidy during build" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 
+set(CMAKE_CXX_FLAGS_RELEASE "-O0")
+
 include(third_party/third_party.cmake)
 
 add_compile_options(-W -Wall -Werror -Wextra -Wpedantic)
