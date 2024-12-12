@@ -17,7 +17,7 @@ option(TACOS_CLANG_TIDY "Run clang-tidy during build" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 
-set(CMAKE_CXX_FLAGS_RELEASE "-O0")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 include(third_party/third_party.cmake)
 
