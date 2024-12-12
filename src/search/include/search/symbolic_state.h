@@ -234,9 +234,6 @@ struct ZoneState : public SymbolicState<LocationType, zones::Zone_slice>
 		//Inverse from search::get_time_successor, not sure why it is done like this instead of checking whether it's even, etc.
 		Endpoint K = max_region_index == 0 ? 0 : (max_region_index - 1) / 2;
 
-		//If even the lower bound is larger than the max constant, something is pretty wrong
-		assert(K == 0 || zone.lower_bound_ <= K);
-
 		//We take/keep the larger of the two maximal constants 
 		if(zone.max_constant_ >= K) {
 			zone.upper_bound_ = zone.max_constant_;

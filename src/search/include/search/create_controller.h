@@ -202,6 +202,7 @@ add_node_to_controller(
 			for (const auto &[clock, _constraint] : constraints) {
 				controller->add_clock(clock);
 			}
+			controller->add_location(Location{successor->words}); //This is bad, but sometimes the above doesn't work correctly
 			controller->add_action(action);
 			controller->add_transition(
 			Transition{Location{node->words}, action, Location{successor->words}, constraints, {}});
@@ -242,21 +243,10 @@ create_controller(const search::SearchTreeNode<CanonicalWord, LocationT, ActionT
 	
 	std::shared_ptr<automata::ta::TimedAutomaton<std::set<CanonicalWord>, ActionT>>
 		controller;
-
-	if(root->words.empty()) {
-		std::set<CanonicalWord> normal_words;
-		for(const auto &evil_word : root->words) {
-			normal_words.insert(evil_word);
-		}
-
-		controller = std::make_shared<automata::ta::TimedAutomaton<
-						std::set<CanonicalWord>, ActionT
-					>>(std::set<ActionT>{}, Location{normal_words}, std::set<Location>{});
-	} else {
-		controller = std::make_shared<automata::ta::TimedAutomaton<
-						std::set<CanonicalWord>, ActionT
-					>>(std::set<ActionT>{}, Location{root->words}, std::set<Location>{});
-	}
+	
+	controller = std::make_shared<automata::ta::TimedAutomaton<
+					std::set<CanonicalWord>, ActionT
+				>> (std::set<ActionT>{}, Location{root->words}, std::set<Location>{});
 
 	add_node_to_controller(
 	  root, controller_actions, environment_actions, K, minimize_controller, controller.get());

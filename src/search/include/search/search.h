@@ -100,6 +100,7 @@ label_graph(SearchTreeNode<CanonicalWord, Location, ActionType, ConstraintSymbol
             std::set<SearchTreeNode<CanonicalWord, Location, ActionType, ConstraintSymbolType> *> &visited)
 {
 	if (node->label != NodeLabel::UNLABELED) {
+		;
 		return;
 	}
 	if (std::find(std::begin(visited), std::end(visited), node) != std::end(visited)) {
@@ -109,6 +110,7 @@ label_graph(SearchTreeNode<CanonicalWord, Location, ActionType, ConstraintSymbol
 		node->label_reason = LabelReason::MONOTONIC_DOMINATION;
 		return;
 	}
+	;
 	visited.insert(node);
 	if (node->state == NodeState::GOOD) {
 		node->label_reason = LabelReason::GOOD_NODE;
@@ -119,6 +121,9 @@ label_graph(SearchTreeNode<CanonicalWord, Location, ActionType, ConstraintSymbol
 	} else if (node->state == NodeState::BAD) {
 		node->label_reason = LabelReason::BAD_NODE;
 		node->set_label(NodeLabel::BOTTOM);
+	} else if (node->get_children().empty()) {
+		node->label_reason = LabelReason::DEAD_NODE;
+		node->set_label(NodeLabel::TOP);
 	} else {
 		for (const auto &[action, child] : node->get_children()) {
 			if (child.get() != node) {
@@ -151,26 +156,30 @@ label_graph(SearchTreeNode<CanonicalWord, Location, ActionType, ConstraintSymbol
 		// selects exactly one element of U.
 		if (first_good_controller_step < first_bad_environment_step) {
 			// The controller can just select the good controller action.
-			node->label_reason = LabelReason::GOOD_CONTROLLER_ACTION_FIRST;
 			node->set_label(NodeLabel::TOP);
+			node->label_reason = LabelReason::GOOD_CONTROLLER_ACTION_FIRST;
+			node->state = NodeState::GOOD;
 		} else if (has_enviroment_step
 		           && first_bad_environment_step == std::numeric_limits<RegionIndex>::max()) {
 			// There is an environment action and no environment action is bad
 			// -> the controller can just select all environment actions
-			node->label_reason = LabelReason::NO_BAD_ENV_ACTION;
 			node->set_label(NodeLabel::TOP);
-		} else if (!has_enviroment_step) {
+			node->label_reason = LabelReason::NO_BAD_ENV_ACTION;
+			node->state = NodeState::GOOD;
+		} else if (!has_enviroment_step && first_good_controller_step == std::numeric_limits<RegionIndex>::max()) {
 			// All controller actions must be bad (otherwise we would be in the first case)
 			// -> no controller strategy
 			assert(first_good_controller_step == std::numeric_limits<RegionIndex>::max());
-			node->label_reason = LabelReason::ALL_CONTROLLER_ACTIONS_BAD;
 			node->set_label(NodeLabel::BOTTOM);
-		} else {
+			node->label_reason = LabelReason::ALL_CONTROLLER_ACTIONS_BAD;
+			node->state = NodeState::BAD;
+		} else if(has_enviroment_step && first_bad_environment_step < std::numeric_limits<RegionIndex>::max() && node->label == NodeLabel::UNLABELED) {
 			// There must be an environment action (otherwise case 3) and one of them must be bad
 			// (otherwise case 2).
 			assert(first_bad_environment_step < std::numeric_limits<RegionIndex>::max());
-			node->label_reason = LabelReason::BAD_ENV_ACTION_FIRST;
 			node->set_label(NodeLabel::BOTTOM);
+			node->label_reason = LabelReason::BAD_ENV_ACTION_FIRST;
+			node->state = NodeState::BAD;
 		}
 	}
 }
