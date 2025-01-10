@@ -88,25 +88,30 @@ namespace {
 					fail_count++;
 				}
 			} else {
-				auto controller = controller_synthesis::create_controller(
-								search.get_root(), controller_actions, environment_actions, 2
-								);
+				try {
+					auto controller = controller_synthesis::create_controller(
+									search.get_root(), controller_actions, environment_actions, 2
+									);
 
-				if(!search::verify_ta_controller(plant, controller, spec, K)) {
-					try{
-						throw std::runtime_error(fmt::format("Synthesized controller is incorrect in iteration {}", i));
-					} catch (std::runtime_error&) {
-						#if USE_VISUALIZATION_INCONSISTENCY
-						visualization::search_tree_to_graphviz(*search.get_root(), true)
-							.render_to_file(fmt::format("railroad_incorrect_mt_{}.svg", i));
+					if(!search::verify_ta_controller(plant, controller, spec, K)) {
+						try{
+							throw std::runtime_error(fmt::format("Synthesized controller is incorrect in iteration {}", i));
+						} catch (std::runtime_error&) {
+							#if USE_VISUALIZATION_INCONSISTENCY
+							visualization::search_tree_to_graphviz(*search.get_root(), true)
+								.render_to_file(fmt::format("railroad_incorrect_mt_{}.svg", i));
 
-						visualization::ta_to_graphviz(controller,
-													false)
-							.render_to_file(fmt::format("railroad_controller__mt{}.pdf", i));
-						#endif
-						
-						fail_count++;
+							visualization::ta_to_graphviz(controller,
+														false)
+								.render_to_file(fmt::format("railroad_controller__mt{}.pdf", i));
+							#endif
+							
+							fail_count++;
+						}
 					}
+				} catch (...) {
+					fail_count++;
+					continue;
 				}
 			}
 		}
@@ -231,26 +236,32 @@ namespace {
 					fail_count++;
 				}
 			} else {
-				auto controller = controller_synthesis::create_controller(
-								search.get_root(), camera_actions, robot_actions, 2
-								);
+				try {
+					auto controller = controller_synthesis::create_controller(
+									search.get_root(), camera_actions, robot_actions, 2
+									);
 
-				if(!search::verify_ta_controller(product, controller, spec, K)) {
-					try{
-						throw std::runtime_error(fmt::format("Synthesized controller is incorrect in iteration {}", i));
-					} catch (std::runtime_error&) {
-						#if USE_VISUALIZATION_INCONSISTENCY
-						visualization::search_tree_to_graphviz(*search.get_root(), true)
-							.render_to_file(fmt::format("robot_incorrect_mt_{}.svg", i));
+					if(!search::verify_ta_controller(product, controller, spec, K)) {
+						try{
+							throw std::runtime_error(fmt::format("Synthesized controller is incorrect in iteration {}", i));
+						} catch (std::runtime_error&) {
+							#if USE_VISUALIZATION_INCONSISTENCY
+							visualization::search_tree_to_graphviz(*search.get_root(), true)
+								.render_to_file(fmt::format("robot_incorrect_mt_{}.svg", i));
 
-						visualization::ta_to_graphviz(controller,
-													false)
-							.render_to_file(fmt::format("robot_controller_mt_{}.pdf", i));
-						#endif
-						
-						fail_count++;
+							visualization::ta_to_graphviz(controller,
+														false)
+								.render_to_file(fmt::format("robot_controller_mt_{}.pdf", i));
+							#endif
+							
+							fail_count++;
+						}
 					}
+				} catch (...) {
+					fail_count++;
+					continue;
 				}
+				
 			}
 		}
 
@@ -373,25 +384,30 @@ namespace {
 					fail_count++;
 				}
 			} else {
-				auto controller = controller_synthesis::create_controller(
-								search.get_root(), camera_actions, robot_actions, 2
-								);
+				try {
+					auto controller = controller_synthesis::create_controller(
+									search.get_root(), camera_actions, robot_actions, 2
+									);
 
-				if(!search::verify_ta_controller(product, controller, spec, K)) {
-					try{
-						throw std::runtime_error(fmt::format("Synthesized controller is incorrect in iteration {}", i));
-					} catch (std::runtime_error&) {
-						#if USE_VISUALIZATION_INCONSISTENCY
-						visualization::search_tree_to_graphviz(*search.get_root(), true)
-							.render_to_file(fmt::format("robot_incorrect_st_{}.svg", i));
+					if(!search::verify_ta_controller(product, controller, spec, K)) {
+						try{
+							throw std::runtime_error(fmt::format("Synthesized controller is incorrect in iteration {}", i));
+						} catch (std::runtime_error&) {
+							#if USE_VISUALIZATION_INCONSISTENCY
+							visualization::search_tree_to_graphviz(*search.get_root(), true)
+								.render_to_file(fmt::format("robot_incorrect_st_{}.svg", i));
 
-						visualization::ta_to_graphviz(controller,
-													false)
-							.render_to_file(fmt::format("robot_controller_st_{}.pdf", i));
-						#endif
-						
-						fail_count++;
+							visualization::ta_to_graphviz(controller,
+														false)
+								.render_to_file(fmt::format("robot_controller_st_{}.pdf", i));
+							#endif
+							
+							fail_count++;
+						}
 					}
+				} catch(...) {
+					fail_count++;
+					continue;
 				}
 			}
 		}
@@ -457,25 +473,30 @@ namespace {
 					fail_count++;
 				}
 			} else {
-				auto controller = controller_synthesis::create_controller(
-								search.get_root(), controller_actions, environment_actions, 2
-								);
+				try {
+					auto controller = controller_synthesis::create_controller(
+									search.get_root(), controller_actions, environment_actions, 2
+									);
 
-				if(!search::verify_ta_controller(plant, controller, spec, K)) {
-					try{
-						throw std::runtime_error(fmt::format("Synthesized controller is incorrect in iteration {}", i));
-					} catch (std::runtime_error&) {
-						#if USE_VISUALIZATION_INCONSISTENCY
-						visualization::search_tree_to_graphviz(*search.get_root(), true)
-							.render_to_file(fmt::format("railroad_incorrect_st_{}.svg", i));
+					if(!search::verify_ta_controller(plant, controller, spec, K)) {
+						try{
+							throw std::runtime_error(fmt::format("Synthesized controller is incorrect in iteration {}", i));
+						} catch (std::runtime_error&) {
+							#if USE_VISUALIZATION_INCONSISTENCY
+							visualization::search_tree_to_graphviz(*search.get_root(), true)
+								.render_to_file(fmt::format("railroad_incorrect_st_{}.svg", i));
 
-						visualization::ta_to_graphviz(controller,
-													false)
-							.render_to_file(fmt::format("railroad_controller__st{}.pdf", i));
-						#endif
-						
-						fail_count++;
+							visualization::ta_to_graphviz(controller,
+														false)
+								.render_to_file(fmt::format("railroad_controller__st{}.pdf", i));
+							#endif
+							
+							fail_count++;
+						}
 					}
+				} catch (...) {
+					fail_count++;
+					continue;
 				}
 			}
 		}

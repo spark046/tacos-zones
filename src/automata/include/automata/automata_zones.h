@@ -754,25 +754,25 @@ namespace tacos::zones {
 		 * 
 		 * @param s1 The first dbm
 		 * @param s2 The second dbm
-		 * @return true if s1 is smaller than s2
+		 * @return true if s1 is lexicographically smaller than s2
 		 */
 		friend bool
 		operator<(const Zone_DBM &s1, const Zone_DBM &s2) {
 			if(s1.size() < s2.size()) {
 				return true;
-			} else if(s1.size() > s2.size() || s1 == s2) {
+			} else if(s1.size() > s2.size()) {
 				return false;
 			}
 
 			for(std::size_t i = 0; i < s1.size() + 1; i++) {
 				for(std::size_t j = 0; j < s1.size() + 1; j++) {
-					if(s2.at(i, j) < s1.at(i,j)) {
-						return false;
+					if(s1.at(i, j) < s2.at(i,j)) {
+						return true;
 					}
 				}
 			}
 
-			return true;
+			return false;
 		}
 	};
 
