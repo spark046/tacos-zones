@@ -717,38 +717,6 @@ namespace tacos::zones {
 		//Max constant that may appear in any zone
 		Endpoint max_constant_;
 
-		/** Check two DBMs for equality.
-		 * @param s1 The first dbm
-		 * @param s2 The second dbm
-		 * @return true if s1 is equal to s2
-		 */
-		friend bool
-		operator==(const Zone_DBM &s1, const Zone_DBM &s2) {
-			if(s1.size() != s2.size()) {
-				return false;
-			}
-
-			for(std::size_t i = 0; i < s1.size() + 1; i++) {
-				for(std::size_t j = 0; j < s1.size() + 1; j++) {
-					if(s1.at(i, j) != s2.at(i,j)) {
-						return false;
-					}
-				}
-			}
-
-			return true;
-		}
-
-		/** Check two DBMs for inequality.
-		 * @param s1 The first dbm
-		 * @param s2 The second dbm
-		 * @return true if s1 is not equal to s2
-		 */
-		friend bool
-		operator!=(const Zone_DBM &s1, const Zone_DBM &s2) {
-			return !(s1 == s2);
-		}
-
 		/** Compare two DBMs.
 		 * Not really a lot of theoretical meaning. Just for sets to be happy
 		 * 
@@ -764,6 +732,10 @@ namespace tacos::zones {
 				return false;
 			}
 
+			if(s1.max_constant_ < s2.max_constant_) {
+				return true;
+			}
+
 			for(std::size_t i = 0; i < s1.size() + 1; i++) {
 				for(std::size_t j = 0; j < s1.size() + 1; j++) {
 					if(s1.at(i, j) < s2.at(i,j)) {
@@ -773,6 +745,26 @@ namespace tacos::zones {
 			}
 
 			return false;
+		}
+
+		/** Check two DBMs for equality.
+		 * @param s1 The first dbm
+		 * @param s2 The second dbm
+		 * @return true if s1 is equal to s2
+		 */
+		friend bool
+		operator==(const Zone_DBM &s1, const Zone_DBM &s2) {
+			return !(s1 < s2) && !(s2 < s1);
+		}
+
+		/** Check two DBMs for inequality.
+		 * @param s1 The first dbm
+		 * @param s2 The second dbm
+		 * @return true if s1 is not equal to s2
+		 */
+		friend bool
+		operator!=(const Zone_DBM &s1, const Zone_DBM &s2) {
+			return !(s1 == s2);
 		}
 	};
 

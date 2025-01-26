@@ -194,7 +194,6 @@ add_node_to_controller(
 
 		bool new_location = false;
 
-		new_location = controller->add_location(Location{successor->words});
 		controller->add_final_location(Location{successor->words});
 
 		for (const auto &[action, constraints] :
@@ -202,7 +201,14 @@ add_node_to_controller(
 			for (const auto &[clock, _constraint] : constraints) {
 				controller->add_clock(clock);
 			}
-			controller->add_location(Location{successor->words}); //This is bad, but sometimes the above doesn't work correctly
+
+			//THIS NEEDS TO BE HERE. This used to be outside the loop, but this would lead to "get_locations().count(...)" returning 0
+			new_location = controller->add_location(Location{successor->words});
+			
+			if(new_location && controller->get_locations().count(Location{successor->words}) == 0) {
+				throw std::runtime_error("Location doesn't exist, whyy");
+			}
+
 			controller->add_action(action);
 			controller->add_transition(
 			Transition{Location{node->words}, action, Location{successor->words}, constraints, {}});

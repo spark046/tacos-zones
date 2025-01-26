@@ -765,6 +765,50 @@ TEST_CASE("Difference Bound Matrix tests", "[zones]")
 		CHECK(!new_dbm.at("x", 0).infinity_);
 		CHECK(!new_dbm.at("y", 0).infinity_);
 	}
+
+	SECTION("Testing comparing DBMs") {
+		Zone_DBM tiny_dbm{std::set<std::string>{"x"}, 5};
+		Zone_DBM mini_dbm{std::set<std::string>{"x"}, 1};
+		Zone_DBM perfectly_adequate_dbm{std::set<std::string>{"x", "y"}, 5};
+		Zone_DBM new_dbm{clocks, 5};
+		Zone_DBM new_big_dbm{clocks, 5};
+
+		new_dbm.conjunct("x", c_lt1);
+		new_dbm.conjunct("y", c_eq3);
+		new_dbm.conjunct("z", c_eq3);
+
+		new_big_dbm.conjunct("x", c_lt1);
+		new_big_dbm.conjunct("y", c_ge3);
+		new_big_dbm.conjunct("z", c_le5);
+
+		Zone_DBM small_dbm = new_dbm.get_subset({"x", "y"});
+		Zone_DBM should_be_dbm{std::set<std::string>{"x", "y"}, 5};
+
+		should_be_dbm.conjunct("x", c_lt1);
+		should_be_dbm.conjunct("y", c_eq3);
+
+		CHECK(small_dbm == should_be_dbm);
+		CHECK(small_dbm < new_dbm);
+
+		//Make sure there are no side effects
+		small_dbm.delay();
+		CHECK(!new_dbm.at("x", 0).infinity_);
+		CHECK(!new_dbm.at("y", 0).infinity_);
+
+		CHECK(mini_dbm < tiny_dbm);
+		CHECK(tiny_dbm < small_dbm);
+		CHECK(small_dbm < perfectly_adequate_dbm);
+		CHECK(perfectly_adequate_dbm < new_dbm);
+		CHECK(new_dbm < new_big_dbm);
+		
+		CHECK(mini_dbm < new_dbm);
+
+		CHECK(mini_dbm != tiny_dbm);
+		CHECK(tiny_dbm != small_dbm);
+		CHECK(small_dbm != perfectly_adequate_dbm);
+		CHECK(perfectly_adequate_dbm != new_dbm);
+		CHECK(new_dbm != new_big_dbm);
+	}
 }
 
 TEST_CASE("Manually Debugging Railway example", "[zones]") {
